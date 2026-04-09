@@ -3,7 +3,7 @@
     <div class="widget-header">
       <h3>{{ $t('inventory.alertsTitle') }}</h3>
       <button 
-        @click="markAllAsRead"
+        @click="handleMarkAllAsRead"
         v-if="unreadCount > 0"
         class="btn-mark-read"
       >
@@ -70,22 +70,24 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { inventoryAlertApi } from '../../api'
+import { useInventoryAlerts } from '../../composables/useInventoryAlerts'
 
 const { t } = useI18n()
+const { 
+  alerts, 
+  unreadCount, 
+  criticalCount, 
+  loadAlerts, 
+  markAlertAsRead, 
+  markAllAsRead, 
+  deleteAlert,
+  startPolling,
+  stopPolling
+} = useInventoryAlerts()
 
-const alerts = ref([])
-const updateInterval = ref(null)
-
-const unreadCount = computed(() => {
-  return alerts.value.filter(a => !a.isRead).length
-})
-
-const criticalCount = computed(() => {
-  return alerts.value.filter(a => a.alertType === 'critical').length
-})
+const emit = defineEmits(['alerts-updated'])
 
 const displayedAlerts = computed(() => {
   // Показываем последние 5 оповещений, непрочитанные в начале
@@ -99,45 +101,6 @@ const displayedAlerts = computed(() => {
     .slice(0, 5)
 })
 
-const loadAlerts = async () => {
-  try {
-    const response = await inventoryAlertApi.getAllLimited(10)
-    alerts.value = response.data
-  } catch (error) {
-    console.error('Ошибка при загрузке оповещений:', error)
-  }
-}
-
-const markAlertAsRead = async (alertId) => {
-  try {
-    await inventoryAlertApi.markAsRead(alertId)
-    const alert = alerts.value.find(a => a.id === alertId)
-    if (alert) {
-      alert.isRead = true
-    }
-  } catch (error) {
-    console.error('Ошибка:', error)
-  }
-}
-
-const markAllAsRead = async () => {
-  try {
-    await inventoryAlertApi.markAllAsRead()
-    alerts.value.forEach(a => a.isRead = true)
-  } catch (error) {
-    console.error('Ошибка:', error)
-  }
-}
-
-const deleteAlert = async (alertId) => {
-  try {
-    await inventoryAlertApi.delete(alertId)
-    alerts.value = alerts.value.filter(a => a.id !== alertId)
-  } catch (error) {
-    console.error('Ошибка:', error)
-  }
-}
-
 const getTimeFromNow = (dateString) => {
   const now = new Date()
   const time = new Date(dateString)
@@ -149,19 +112,22 @@ const getTimeFromNow = (dateString) => {
   return `${Math.floor(diff / 86400)}д назад`
 }
 
+const handleMarkAllAsRead = async () => {
+  await markAllAsRead()
+  emit('alerts-updated')
+}
+
 onMounted(() => {
-  loadAlerts()
-  
-  // Обновлять оповещения каждые 30 секунд
-  updateInterval.value = setInterval(() => {
-    loadAlerts()
-  }, 30000)
+  startPolling()
 })
 
 onUnmounted(() => {
-  if (updateInterval.value) {
-    clearInterval(updateInterval.value)
-  }
+  stopPolling()
+})
+
+// Экспортируем loadAlerts для вызова из других компонентов
+defineExpose({
+  loadAlerts
 })
 </script>
 
@@ -174,6 +140,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
 }
 
 .widget-header {

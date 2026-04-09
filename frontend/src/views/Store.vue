@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, warn, watch, computed } from 'vue'
+import { ref, onMounted, warn, watch, computed, onUnmounted } from 'vue'
 import CircleChart from '../components/store/CircleChart.vue'
 import BarChart from '../components/store/BarChart.vue'
 import { AgGridVue } from 'ag-grid-vue3'
@@ -9,7 +9,7 @@ import InventoryModal from '../components/store/InventoryModal.vue'
 import OrderModal from '../components/store/OrderModal.vue'
 import PdfModal from '../components/store/PdfModal.vue'
 import { useI18n } from 'vue-i18n'
-import { inventoryApi, inventoryRequestApi } from '../api'
+import { inventoryApi, inventoryRequestApi, inventoryAlertApi } from '../api'
 
 import InventoryManagement from '../components/store/InventoryManagement.vue'
 import InventoryRequestsList from '../components/store/InventoryRequestsList.vue'
@@ -20,6 +20,8 @@ const { t } = useI18n()
 
 // Вкладки внутри склада ЗИП
 const storeTab = ref('inventory') // 'inventory' | 'requests' | 'alerts'
+const unreadAlertsCount = ref(0)
+let alertsUpdateInterval = null
 
 const props = defineProps({
   data: {
@@ -315,47 +317,107 @@ const handleAddItem = async (item) => {
 const handleOrderSubmit = async (orderData) => {
   console.log('Заказ оформлен:', orderData);
   
-  // Находим товар по артикулу
-  const item = rowData.value.find(i => i.Article === orderData.selectedProduct);
-  
-  if (!item) {
+  // Проверяем наличие товаров в заявке
+  if (!orderData.items || orderData.items.length === 0) {
     alert(t('inventory.loadError'));
     return;
   }
 
   try {
-    // 1. Создаём заявку в БД через API
-    const requestData = {
-      inventoryItemId: parseInt(item.Number),  // ← Исправил: camelCase!
-      requestedQuantity: orderData.count,       // ← Исправил: camelCase!
-      reason: 'manual',
-      createdBy: orderData.requesterName || 'Пользователь'  // ← Исправил: camelCase!
-    };
+    let successCount = 0;
+    let errorCount = 0;
     
-    const response = await inventoryRequestApi.create(requestData);
-    console.log('Заявка создана в БД:', response.data);
-    
-    // 2. Уменьшаем запас в локальном массиве
-    const itemIndex = rowData.value.findIndex(i => i.Article === orderData.selectedProduct);
-    if (itemIndex !== -1) {
-      const updatedItem = { ...rowData.value[itemIndex] };
-      updatedItem.count = Number(updatedItem.count) - Number(orderData.count);
-      rowData.value[itemIndex] = updatedItem;
-      gridApi.value?.applyTransaction({ update: [updatedItem] });
-      gridApi.value?.redrawRows();
+    // Итерируем по каждому товару в заявке
+    for (const orderItem of orderData.items) {
+      try {
+        // Находим товар в инвентаре по артикулу
+        const inventoryItem = rowData.value.find(i => 
+          i.Article === orderItem.article || 
+          i.num_rus === orderItem.name ||
+          i.Number === orderItem.originalProduct?.Number
+        );
+        
+        if (!inventoryItem) {
+          console.warn(`⚠️ Товар не найден: ${orderItem.article}`);
+          errorCount++;
+          continue;
+        }
+
+        // Создаём заявку в БД через API
+        const requestData = {
+          inventoryItemId: parseInt(inventoryItem.Number),
+          requestedQuantity: Number(orderItem.quantity),
+          reason: 'manual',
+          createdBy: orderData.requesterName || 'Пользователь'
+        };
+        
+        const response = await inventoryRequestApi.create(requestData);
+        console.log('✅ Заявка создана в БД:', response.data);
+        successCount++;
+        
+        // Уменьшаем запас в локальном массиве
+        const itemIndex = rowData.value.findIndex(i => i.Number === inventoryItem.Number);
+        if (itemIndex !== -1) {
+          const updatedItem = { ...rowData.value[itemIndex] };
+          updatedItem.count = Number(updatedItem.count) - Number(orderItem.quantity);
+          rowData.value[itemIndex] = updatedItem;
+          gridApi.value?.applyTransaction({ update: [updatedItem] });
+        }
+      } catch (itemError) {
+        console.error('Ошибка при создании заявки для товара:', orderItem.article, itemError);
+        errorCount++;
+      }
     }
     
-    alert(t('inventory.requestCreated'));
+    // Обновляем таблицу
+    gridApi.value?.redrawRows();
+    
+    // Выводим результат
+    if (successCount > 0 && errorCount === 0) {
+      alert(`✅ ${successCount} заявка(и) успешно созданы!`);
+    } else if (successCount > 0) {
+      alert(`⚠️ Создано ${successCount} заявок(и), ошибок: ${errorCount}`);
+    } else {
+      alert(`❌ Ошибка при создании заявок`);
+    }
   } catch (error) {
-    console.error('Ошибка при создании заявки:', error);
-    alert(t('inventory.requestError'));
+    console.error('Ошибка при обработке заказа:', error);
+    alert('Ошибка при обработке заказа: ' + error.message);
   }
 };
+
+// Загрузка количества непрочитанных оповещений
+const loadUnreadAlertsCount = async () => {
+  try {
+    const response = await inventoryAlertApi.getUnread()
+    unreadAlertsCount.value = response.data.length
+  } catch (error) {
+    console.error('Ошибка при загрузке непрочитанных оповещений:', error)
+  }
+}
+
+// Обновление счетчика при прочтении всех оповещений
+const onAlertsUpdated = () => {
+  unreadAlertsCount.value = 0
+}
 
 // Загрузка товаров при монтировании компонента
 onMounted(() => {
   loadInventoryFromDB();
+  loadUnreadAlertsCount()
+  
+  // Обновлять количество непрочитанных оповещений каждые 10 секунд
+  alertsUpdateInterval = setInterval(() => {
+    loadUnreadAlertsCount()
+  }, 10000)
 });
+
+// Очистка интервалов при размонтировании
+watch(() => storeTab.value, () => {
+  if (storeTab.value === 'alerts') {
+    loadUnreadAlertsCount()
+  }
+})
 
 // Функция, которая срабатывает при клике на строку или выборе
 const onSelectionChanged = (event) => {
@@ -439,6 +501,9 @@ const openAttachModal = () => {
           @click="storeTab = 'alerts'"
         >
           🔔 {{ t('inventory.alertsTitle') }}
+          <span v-if="unreadAlertsCount > 0" class="alert-badge">
+            {{ unreadAlertsCount }}
+          </span>
         </button>
       </div>
       
@@ -509,7 +574,7 @@ const openAttachModal = () => {
 
     <!-- Вкладка 3: Оповещения -->
     <div v-if="storeTab === 'alerts'" class="tab-content alerts-tab">
-      <InventoryAlerts />
+      <InventoryAlerts @alerts-updated="onAlertsUpdated" />
     </div>
 
     <!-- Modals -->
@@ -571,6 +636,7 @@ const openAttachModal = () => {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  position: relative;
 }
 
 .store-tab:hover {
@@ -583,6 +649,22 @@ const openAttachModal = () => {
   color: white;
   border-color: #059669;
   box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+.alert-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  margin-left: 6px;
+  background: #ef4444;
+  color: white;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
 }
 
 /* Контент вкладок */

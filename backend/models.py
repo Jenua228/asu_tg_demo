@@ -183,6 +183,7 @@ class InventoryItem(Base):
     storage_name = Column(String(200), nullable=True)  # Название склада/места хранения
     comment = Column(Text, nullable=True)  # Комментарий
     pdf_url = Column(String(500), nullable=True)  # URL на техническую документацию
+    unit_measurement = Column(String(50), default="шт.")  # Единица измерения (шт., кг, м, л и т.д.)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

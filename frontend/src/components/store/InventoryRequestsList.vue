@@ -21,6 +21,11 @@
           ⚠️ {{ $t('inventory.checkLowStock') }}
         </button>
 
+        <!-- Кнопка для создания новой заявки -->
+        <button @click="isOrderModalOpen = true" class="btn-create-order" :disabled="isLoading">
+          📝 {{ $t('store.createOrder') }}
+        </button>
+
         <!-- Кнопка возврата на вкладку товаров -->
         <button @click="goBackToInventory" class="btn-back">
           ← {{ $t('common.back') }}
@@ -28,84 +33,179 @@
       </div>
     </div>
     
-    <!-- Таблица заявок -->
-    <div class="requests-table-container" v-if="filteredRequests.length > 0">
-      <table class="requests-table">
-        <thead>
-          <tr>
-            <th>{{ $t('inventory.id') }}</th>
-            <th>{{ $t('inventory.itemArticle') }}</th>
-            <th>{{ $t('inventory.itemName') }}</th>
-            <th>{{ $t('inventory.quantity') }}</th>
-            <th>{{ $t('inventory.reason') }}</th>
-            <th>{{ $t('inventory.status') }}</th>
-            <th>{{ $t('inventory.createdDate') }}</th>
-            <th>{{ $t('inventory.actions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr 
-            v-for="req in filteredRequests" 
-            :key="req.id"
-            :class="`status-${req.status}`"
-          >
-            <td class="id-cell">{{ req.id }}</td>
-            <td>{{ req.inventoryItem.article }}</td>
-            <td class="name-cell">{{ req.inventoryItem.nameRus }}</td>
-            <td class="quantity-cell">
-              <!-- Редактируемое поле количества -->
-              <input 
-                :value="req.requestedQuantity"
-                @change="updateRequestQuantity(req.id, parseInt($event.target.value), req)"
-                type="number"
-                min="1"
-                class="quantity-input"
-              />
-            </td>
-            <td>
-              <span :class="`badge-${req.reason}`">
-                {{ req.reason === 'manual' ? $t('inventory.reasonManual') : $t('inventory.reasonAuto') }}
-              </span>
-            </td>
-            <td>
-              <select 
-                :value="req.status"
-                @change="updateRequestStatus(req.id, $event.target.value)"
-                class="status-select"
-              >
-                <option value="новая">{{ $t('inventory.statusNew') }}</option>
-                <option value="в_процессе">{{ $t('inventory.statusInProcess') }}</option>
-                <option value="выполнена">{{ $t('inventory.statusCompleted') }}</option>
-                <option value="отменена">{{ $t('inventory.statusCancelled') }}</option>
-              </select>
-            </td>
-            <td class="date-cell">{{ formatDate(req.createdAt) }}</td>
-            <td class="actions-cell">
-              <button 
-                @click="viewRequestDetails(req)"
-                class="btn-details"
-                :title="$t('inventory.viewDetails')"
-              >
-                👁️
-              </button>
-              <button 
-                v-if="req.status !== 'отменена'"
-                @click="deleteRequest(req.id)"
-                class="btn-delete"
-                :title="$t('inventory.cancel')"
-              >
-                ✕
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- РАЗДЕЛ 1: АКТУАЛЬНЫЕ ЗАЯВКИ -->
+    <div class="section-active-requests">
+      <h3 class="section-title">✓ Актуальные заявки ({{ activeRequests.length }})</h3>
+      
+      <div class="requests-table-container" v-if="activeRequests.length > 0">
+        <table class="requests-table">
+          <thead>
+            <tr>
+              <th>{{ $t('inventory.id') }}</th>
+              <th>{{ $t('inventory.itemArticle') }}</th>
+              <th>{{ $t('inventory.itemName') }}</th>
+              <th>{{ $t('inventory.quantity') }}</th>
+              <th>{{ $t('inventory.reason') }}</th>
+              <th>{{ $t('inventory.status') }}</th>
+              <th>{{ $t('inventory.createdDate') }}</th>
+              <th>{{ $t('inventory.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr 
+              v-for="req in activeRequests" 
+              :key="req.id"
+              :class="`status-${req.status}`"
+            >
+              <td class="id-cell">{{ req.id }}</td>
+              <td>{{ req.inventoryItem.article }}</td>
+              <td class="name-cell">{{ req.inventoryItem.nameRus }}</td>
+              <td class="quantity-cell">
+                <input 
+                  :value="req.requestedQuantity"
+                  @change="updateRequestQuantity(req.id, parseInt($event.target.value), req)"
+                  type="number"
+                  min="1"
+                  class="quantity-input"
+                />
+              </td>
+              <td>
+                <span :class="`badge-${req.reason}`">
+                  {{ req.reason === 'manual' ? $t('inventory.reasonManual') : $t('inventory.reasonAuto') }}
+                </span>
+              </td>
+              <td>
+                <select 
+                  :value="req.status"
+                  @change="updateRequestStatus(req.id, $event.target.value)"
+                  class="status-select"
+                >
+                  <option value="новая">{{ $t('inventory.statusNew') }}</option>
+                  <option value="одобрена">✓ Одобрена</option>
+                  <option value="в_процессе">{{ $t('inventory.statusInProcess') }}</option>
+                  <option value="выполнена">{{ $t('inventory.statusCompleted') }}</option>
+                  <option value="отменена">{{ $t('inventory.statusCancelled') }}</option>
+                </select>
+              </td>
+              <td class="date-cell">{{ formatDate(req.createdAt) }}</td>
+              <td class="actions-cell">
+                <button 
+                  @click="viewRequestDetails(req)"
+                  class="btn-details"
+                  :title="$t('inventory.viewDetails')"
+                >
+                  👁️
+                </button>
+                <button 
+                  v-if="req.status !== 'одобрена' && req.status !== 'выполнена'"
+                  @click="updateRequestStatus(req.id, 'одобрена')"
+                  class="btn-approve"
+                  title="Одобрить заявку"
+                >
+                  ✓
+                </button>
+                <button 
+                  @click="deleteRequest(req.id)"
+                  class="btn-delete"
+                  :title="$t('inventory.cancel')"
+                >
+                  ✕
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div v-else class="empty-section">
+        <p>✓ Нет активных заявок</p>
+      </div>
+    </div>
+
+    <!-- РАЗДЕЛ 2: ВЫПОЛНЕННЫЕ И ОТМЕНЁННЫЕ ЗАЯВКИ -->
+    <div class="section-completed-requests">
+      <h3 class="section-title">✓ Выполненные / Отменённые заявки ({{ completedRequests.length }})</h3>
+      
+      <div class="requests-table-container" v-if="completedRequests.length > 0">
+        <table class="requests-table">
+          <thead>
+            <tr>
+              <th>{{ $t('inventory.id') }}</th>
+              <th>{{ $t('inventory.itemArticle') }}</th>
+              <th>{{ $t('inventory.itemName') }}</th>
+              <th>{{ $t('inventory.quantity') }}</th>
+              <th>{{ $t('inventory.reason') }}</th>
+              <th>{{ $t('inventory.status') }}</th>
+              <th>{{ $t('inventory.createdDate') }}</th>
+              <th>{{ $t('inventory.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr 
+              v-for="req in completedRequests" 
+              :key="req.id"
+              :class="`status-${req.status}`"
+            >
+              <td class="id-cell">{{ req.id }}</td>
+              <td>{{ req.inventoryItem.article }}</td>
+              <td class="name-cell">{{ req.inventoryItem.nameRus }}</td>
+              <td class="quantity-cell">{{ req.requestedQuantity }}</td>
+              <td>
+                <span :class="`badge-${req.reason}`">
+                  {{ req.reason === 'manual' ? $t('inventory.reasonManual') : $t('inventory.reasonAuto') }}
+                </span>
+              </td>
+              <td>
+                <span :class="`status-badge status-${req.status}`">
+                  {{ req.status === 'выполнена' ? '✓ Выполнена' : '✕ Отменена' }}
+                </span>
+              </td>
+              <td class="date-cell">{{ formatDate(req.createdAt) }}</td>
+              <td class="actions-cell">
+                <button 
+                  @click="viewRequestDetails(req)"
+                  class="btn-details"
+                  :title="$t('inventory.viewDetails')"
+                >
+                  👁️
+                </button>
+                <button 
+                  v-if="req.status === 'отменена'"
+                  @click="updateRequestStatus(req.id, 'новая')"
+                  class="btn-restore"
+                  title="Вернуть заявку в статус 'Новая'"
+                >
+                  🔄
+                </button>
+                <button 
+                  @click="deleteRequest(req.id)"
+                  class="btn-delete"
+                  :title="$t('inventory.delete')"
+                >
+                  🗑️
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div v-else class="empty-section">
+        <p>✓ Нет завершённых заявок</p>
+      </div>
     </div>
     
-    <!-- Пустое состояние -->
-    <div v-else class="empty-state">
+    <!-- Если нет заявок вообще -->
+    <div v-if="requests.length === 0" class="empty-state">
       <p>{{ $t('inventory.noRequests') }}</p>
     </div>
+    
+    <!-- OrderModal для создания новой заявки -->
+    <OrderModal 
+      v-model="isOrderModalOpen" 
+      :inventory="inventoryData"
+      @submit="handleOrderSubmit"
+    />
     
     <!-- Модальное окно деталей заявки -->
     <div v-if="selectedRequest" class="modal-overlay" @click="closeRequestDetails">
@@ -157,8 +257,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { inventoryRequestApi, inventoryApi } from '../../api'
+import { useInventoryAlerts } from '../../composables/useInventoryAlerts'
+import OrderModal from './OrderModal.vue'
 
 const { t } = useI18n()
+const { loadAlerts } = useInventoryAlerts()
 
 const emit = defineEmits(['back-to-inventory'])
 
@@ -166,12 +269,27 @@ const requests = ref([])
 const selectedStatus = ref('')
 const selectedRequest = ref(null)
 const isLoading = ref(false)
+const isOrderModalOpen = ref(false)
+const inventoryData = ref([])
 
 const filteredRequests = computed(() => {
   if (!selectedStatus.value) {
     return requests.value
   }
   return requests.value.filter(req => req.status === selectedStatus.value)
+})
+
+// Разделяем заявки на актуальные и завершённые
+const activeRequests = computed(() => {
+  return requests.value.filter(req => 
+    req.status === 'новая' || req.status === 'в_процессе'
+  )
+})
+
+const completedRequests = computed(() => {
+  return requests.value.filter(req => 
+    req.status === 'выполнена' || req.status === 'отменена'
+  )
 })
 
 const formatDate = (date) => {
@@ -296,8 +414,97 @@ const goBackToInventory = () => {
   emit('back-to-inventory')
 }
 
+// Загрузка инвентаря для OrderModal
+const loadInventoryData = async () => {
+  try {
+    const response = await inventoryApi.getAll()
+    // Преобразуем ответ БД в формат AG Grid
+    inventoryData.value = response.data.map((item) => ({
+      Number: item.id.toString(),
+      Article: item.article,
+      num_rus: item.nameRus,
+      num_eng: item.nameEng,
+      count: item.currentCount,
+      min_sctock: item.minStock,
+      name_storage: item.storageName,
+      comment: item.comment || '',
+      pdfUrl: item.pdfUrl || '',
+      _dbId: item.id
+    }))
+    console.log('✅ Инвентарь загружен для OrderModal:', inventoryData.value.length)
+  } catch (error) {
+    console.error('❌ Ошибка при загрузке инвентаря:', error)
+  }
+}
+
+// Обработка создания заявки через OrderModal
+const handleOrderSubmit = async (orderData) => {
+  console.log('📝 Заявка оформлена через вкладку заявок:', orderData)
+  
+  if (!orderData.items || orderData.items.length === 0) {
+    alert(t('inventory.loadError'))
+    return
+  }
+
+  try {
+    let successCount = 0
+    let errorCount = 0
+    
+    // Итерируем по каждому товару в заявке
+    for (const orderItem of orderData.items) {
+      try {
+        // Находим товар в инвентаре по артикулу
+        const inventoryItem = inventoryData.value.find(i => 
+          i.Article === orderItem.article || 
+          i.num_rus === orderItem.name
+        )
+        
+        if (!inventoryItem) {
+          console.warn(`⚠️ Товар не найден: ${orderItem.article}`)
+          errorCount++
+          continue
+        }
+
+        // Создаём заявку в БД через API
+        const requestData = {
+          inventoryItemId: parseInt(inventoryItem.Number),
+          requestedQuantity: Number(orderItem.quantity),
+          reason: 'manual',
+          createdBy: orderData.requesterName || 'Пользователь'
+        }
+        
+        const response = await inventoryRequestApi.create(requestData)
+        console.log('✅ Заявка создана в БД:', response.data)
+        successCount++
+      } catch (itemError) {
+        console.error('Ошибка при создании заявки для товара:', orderItem.article, itemError)
+        errorCount++
+      }
+    }
+    
+    // Обновляем список заявок
+    await refreshRequests()
+    
+    // Обновляем оповещения чтобы они появились сразу
+    await loadAlerts(true)
+    
+    // Выводим результат
+    if (successCount > 0 && errorCount === 0) {
+      alert(`✅ ${successCount} заявка(и) успешно созданы!`)
+    } else if (successCount > 0) {
+      alert(`⚠️ Создано ${successCount} заявок(и), ошибок: ${errorCount}`)
+    } else {
+      alert(`❌ Ошибка при создании заявок`)
+    }
+  } catch (error) {
+    console.error('Ошибка при обработке заказа:', error)
+    alert('Ошибка при обработке заказа: ' + error.message)
+  }
+}
+
 onMounted(() => {
   refreshRequests()
+  loadInventoryData()
 })
 </script>
 
@@ -363,8 +570,23 @@ onMounted(() => {
   background: #d97706;
 }
 
+.btn-create-order {
+  padding: 8px 15px;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-create-order:hover:not(:disabled) {
+  background: #7c3aed;
+}
+
 .btn-refresh:disabled,
-.btn-check-stock:disabled {
+.btn-check-stock:disabled,
+.btn-create-order:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -476,6 +698,34 @@ onMounted(() => {
 
 .btn-details:hover {
   background: #dbeafe;
+  border-radius: 4px;
+}
+
+.btn-approve {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #10b981;
+  font-weight: bold;
+}
+
+.btn-approve:hover {
+  background: #d1fae5;
+  border-radius: 4px;
+}
+
+.btn-restore {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.btn-restore:hover {
+  background: #dcfce7;
   border-radius: 4px;
 }
 
@@ -634,5 +884,65 @@ onMounted(() => {
   outline: none;
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Стили для разделенных секций */
+.section-active-requests,
+.section-completed-requests {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.section-active-requests {
+  border-left: 4px solid #3b82f6;
+}
+
+.section-completed-requests {
+  border-left: 4px solid #6b7280;
+  opacity: 0.95;
+}
+
+.section-title {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.section-active-requests .section-title {
+  color: #3b82f6;
+}
+
+.section-completed-requests .section-title {
+  color: #6b7280;
+}
+
+.empty-section {
+  text-align: center;
+  padding: 30px 20px;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.status-выполнена {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.status-отменена {
+  background: #fee2e2;
+  color: #991b1b;
 }
 </style>

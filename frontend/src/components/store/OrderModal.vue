@@ -130,7 +130,7 @@ function addItem() {
                   selectedProduct.producer || 
                   selectedProduct.brand || '',
     quantity: newItem.value.quantity,
-    unit: newItem.value.unit,
+    unit: selectedProduct.unitMeasurement || selectedProduct.unit || newItem.value.unit,
     stock: stock,
     originalProduct: selectedProduct
   })
@@ -213,9 +213,16 @@ function validateForm() {
     return false
   }
   
-  if (!order.value.reason.trim()) {
-    alert(t('orderModal.alertNotReason'))
-    return false
+  // Проверяем что у каждого товара есть модель и серийный номер
+  for (const item of order.value.items) {
+    if (!item.model || item.model.trim() === '') {
+      alert(`Ошибка: Для товара "${item.name}" не указана модель`)
+      return false
+    }
+    if (!item.serial || item.serial.trim() === '') {
+      alert(`Ошибка: Для товара "${item.name}" не указан серийный номер`)
+      return false
+    }
   }
   
   if (!hasSelectedPartTypes.value) {

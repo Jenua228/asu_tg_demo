@@ -1023,6 +1023,7 @@ def inventory_item_to_dict(item):
             "storageName": item.storage_name,
             "comment": item.comment,
             "pdfUrl": item.pdf_url,
+            "unitMeasurement": getattr(item, 'unit_measurement', None) or "шт.",
             "createdAt": item.created_at.isoformat() if item.created_at else None,
             "updatedAt": item.updated_at.isoformat() if item.updated_at else None
         }
