@@ -8,12 +8,18 @@ import ImageTooltip from '../components/ImageTooltip.vue'
 import InventoryModal from '../components/store/InventoryModal.vue'
 import OrderModal from '../components/store/OrderModal.vue'
 import PdfModal from '../components/store/PdfModal.vue'
-import OrderList from '../components/store/OrderList.vue'
 import { useI18n } from 'vue-i18n'
-import {isOrderList} from '../components/store/Const'
+import { inventoryApi, inventoryRequestApi } from '../api'
+
+import InventoryManagement from '../components/store/InventoryManagement.vue'
+import InventoryRequestsList from '../components/store/InventoryRequestsList.vue'
+import InventoryAlerts from '../components/store/InventoryAlerts.vue'
 
 
 const { t } = useI18n()
+
+// Вкладки внутри склада ЗИП
+const storeTab = ref('inventory') // 'inventory' | 'requests' | 'alerts'
 
 const props = defineProps({
   data: {
@@ -100,7 +106,7 @@ const columnDefs = computed(() => [
 
 
 const projectsByDepartment = [  
-{ Number: '1.2.1.1', Article: "468353.055", num_rus: 'Блок распределительный', num_eng: 'Distribution unit', count: '3',  comment: "", imgName: "Distribution unit ШИБФ.468353.055.jpg", min_sctock: '3', pdfUrl: '' },
+  { Number: '1.2.1.1', Article: "468353.055", num_rus: 'Блок распределительный', num_eng: 'Distribution unit', count: '3',  comment: "", imgName: "Distribution unit ШИБФ.468353.055.jpg", min_sctock: '3', pdfUrl: '' },
   { Number: '1.2.2.1', Article: "466217.002", num_rus: 'ЭВМ промышленного назначения TC-1900', num_eng: 'Industrial computer TC-1900', count: '5',  comment: "", imgName: 'Industrial computer ТС-1900 “Тензор” ТСВН.466217.002.jpg', min_sctock: '3', pdfUrl: '' },
   { Number: '1.2.2.2', Article: "466234", num_rus: 'Цифровой мультиметр Truevolt 34461A', num_eng: 'Digital multimeter Truevolt 34461', count: '12',  comment: "", imgName: "Digital multimeter Truevolt 34461A.jpg", min_sctock: '3', pdfUrl: "/doc/ЕФ3.035.074.pdf"},
   { Number: '1.2.3.1', Article: "411218.014", num_rus: 'Аналоговый сигнатурный анализатор АСА', num_eng: 'Analogue signature analyser ACA', count: '8',  comment: "", imgName: "Analogue signature analyser АСА ВЦТП.411218.014.jpg", min_sctock: '3', pdfUrl: "/doc/ЕФ3.035.074 ПЭ3.pdf"},
@@ -112,7 +118,7 @@ const projectsByDepartment = [
   { Number: '2.2.2.4', Article: "8007-0133", num_rus: 'Многофункциональный цифровой паяльно-ремонтный центр PACE PRC-2000E', num_eng: 'Multifunction digital repair soldering station PACE PRC-2000E', count: '7', min_sctock: '3',  comment: "",  imgName: "Multifunction digital repair soldering station PACE PRC-2000E.jpg"},
   { Number: '3.1.1.1', Article: "", num_rus: 'Аппарат телефонный «ТА-88»', num_eng: 'Telephone set “ТА-88”', count: '5',  comment: "", imgName: "Telephone set “ТА-88” .jpg", min_sctock: '3'},
   { Number: '3.1.1.2', Article: "411212.002", num_rus: 'Измеритель сопротивления заземления ИС-20', num_eng: 'Ground resistance meter IC-20', count: '6',  comment: "", imgName: "Ground resistance meter ИС-20 РАПМ.411212.002.jpg", min_sctock: '3'},
-     { Number: '1.1.1.0', Article: "066419.012", num_rus: 'Субблок Н6.17.06.08', num_eng: 'Subblock N6.17.06.08', count: '2',  comment: "", imgName: "sadfg.jpg", min_sctock: '1', pdfUrl: "/doc/Н6.17.06.08-PRD.pdf"},    
+  { Number: '1.1.1.0', Article: "066419.012", num_rus: 'Субблок Н6.17.06.08', num_eng: 'Subblock N6.17.06.08', count: '2',  comment: "", imgName: "sadfg.jpg", min_sctock: '1', pdfUrl: "/doc/Н6.17.06.08-PRD.pdf"},    
   { Number: '1.1.1.1', Article: "133LN1", num_rus: 'Плата 133ЛН1', num_eng: '133ln1', count: '3',  comment: "", imgName: "133ln.jpg", min_sctock: '6', pdfUrl: "/doc/ЕФ3.035.074 СБ.PDF"},
   { Number: '1.1.1.2', Article: "533TL2", num_rus: '533ТЛ2 элемент', num_eng: '533TL2 element', count: '1',  comment: "", imgName: "Image1.jpg", min_sctock: '2'},
   { Number: '3.1.3.1', Article: "687431.003", num_rus: 'Катушка с кабелем ЛВС', num_eng: 'LAN cable spool', count: '9',  comment: "", imgName: "LAN cable spool ШИБФ.687431.003.jpg", min_sctock: '3'},
@@ -120,15 +126,13 @@ const projectsByDepartment = [
 
 const isModalOpen = ref(false)
 const isOrderModalOpen = ref(false)
-const rowData = ref([...projectsByDepartment])
+const rowData = ref([])
+const isLoadingInventory = ref(false)
 const gridApi = ref(null);
 const selectedPdfUrl = ref(null); 
 const isPdfModalOpen = ref(false);
 const isEditPdfMode = ref(false); // Состояние для переключения модалки
 const isRowSelected = ref(false); // Выбрана ли хоть одна строка
-
-
-
 
 
 const localeRu = computed(()  => ({
@@ -194,52 +198,164 @@ const localeRu = computed(()  => ({
 
 
 
-const onCellValueChanged = (event) => {
-  event.api.redrawRows({ rowNodes: [event.node] });
+const onCellValueChanged = async (event) => {
+  // Когда пользователь редактирует ячейку таблицы - сохраняем в БД
+  const updatedItem = event.data;
+  
+  try {
+    // Преобразуем UI формат → API формат
+    const apiPayload = {
+      article: updatedItem.Article,
+      nameRus: updatedItem.num_rus,
+      nameEng: updatedItem.num_eng,
+      currentCount: Number(updatedItem.count),
+      minStock: Number(updatedItem.min_sctock),
+      storageName: updatedItem.name_storage,
+      comment: updatedItem.comment || '',
+      pdfUrl: updatedItem.pdfUrl || ''
+    };
+    
+    const dbId = updatedItem._dbId || parseInt(updatedItem.Number);
+    console.log('📤 Обновляю товар в БД (ID=' + dbId + '):', apiPayload);
+    
+    // Отправляем PUT запрос
+    await inventoryApi.update(dbId, apiPayload);
+    console.log('✅ Товар обновлён в БД');
+  } catch (error) {
+    console.error('❌ Ошибка при сохранении товара:', error);
+    alert('Ошибка при сохранении: ' + error.message);
+    // Откатываем изменение в UI
+    event.api.redrawRows({ rowNodes: [event.node] });
+  }
 };
 
+// Загрузить товары из БД при монтировании компонента
+const loadInventoryFromDB = async () => {
+  isLoadingInventory.value = true;
+  try {
+    const response = await inventoryApi.getAll();
+    // Преобразуем ответ БД (camelCase) в формат AG Grid (snake_case)
+    rowData.value = response.data.map((item) => ({
+      Number: item.id.toString(),
+      Article: item.article,
+      num_rus: item.nameRus,      // ← Исправил: nameRus → num_rus
+      num_eng: item.nameEng,      // ← Исправил: nameEng → num_eng
+      count: item.currentCount,   // ← Исправил: currentCount → count
+      min_sctock: item.minStock,  // ← Исправил: minStock → min_sctock
+      name_storage: item.storageName,  // ← Исправил: storageName → name_storage
+      comment: item.comment || '',
+      imgName: '',
+      pdfUrl: item.pdfUrl || '',
+      _dbId: item.id // Сохраняем ID из БД
+    }));
+    console.log('✅ Товары загружены из БД:', rowData.value.length);
+  } catch (error) {
+    console.error('❌ Ошибка при загрузке товаров:', error);
+    rowData.value = [];
+  } finally {
+    isLoadingInventory.value = false;
+  }
+};
 
-const onGridReady = (params) => {
+const onCellReady = (params) => {
   gridApi.value = params.api;
 };
 
 const getRowId = (params) => params.data.Number; 
-const handleAddItem = (item) => {
-  // Добавляем в массив для реактивности
-  rowData.value = [...rowData.value, item];
-  
-  // Принудительно добавляем строку через API для мгновенного отображения
-  gridApi.value?.applyTransaction({ add: [item] });
+const handleAddItem = async (item) => {
+  try {
+    // 1. Преобразуем данные из формата формы в формат API
+    const apiPayload = {
+      article: item.Article || '',
+      nameRus: item.num_rus,
+      nameEng: item.num_eng,
+      currentCount: Number(item.count) || 0,
+      minStock: Number(item.min_sctock) || 0,
+      storageName: item.name_storage || 'Склад ЗИП',
+      comment: item.comment || '',
+      pdfUrl: item.pdfUrl || ''
+    };
+    
+    console.log('📤 Отправляю товар в БД:', apiPayload);
+    
+    // 2. Сохраняем в БД через API
+    const response = await inventoryApi.create(apiPayload);
+    const createdItem = response.data;
+    
+    console.log('✅ Товар сохранён в БД:', createdItem);
+    
+    // 3. Преобразуем ответ из БД (camelCase) обратно в формат AG Grid (snake_case)
+    const gridItem = {
+      Number: createdItem.id.toString(),
+      Article: createdItem.article,
+      num_rus: createdItem.nameRus,  // ← Исправил: nameRus → num_rus
+      num_eng: createdItem.nameEng,  // ← Исправил: nameEng → num_eng
+      count: createdItem.currentCount,  // ← Исправил: currentCount → count
+      min_sctock: createdItem.minStock,  // ← Исправил: minStock → min_sctock
+      name_storage: createdItem.storageName,  // ← Исправил: storageName → name_storage
+      comment: createdItem.comment || '',
+      imgName: '',
+      pdfUrl: createdItem.pdfUrl || '',
+      _dbId: createdItem.id
+    };
+    
+    // 4. Добавляем в локальный массив для немедленного отображения
+    rowData.value = [...rowData.value, gridItem];
+    gridApi.value?.applyTransaction({ add: [gridItem] });
+    
+    alert(t('inventory.itemAdded'));
+  } catch (error) {
+    console.error('❌ Ошибка при добавлении товара:', error);
+    alert(t('inventory.addError') || 'Ошибка при добавлении товара');
+  }
 };
 
 
 
-const handleOrderSubmit = (orderData) => {
+const handleOrderSubmit = async (orderData) => {
   console.log('Заказ оформлен:', orderData);
   
-  // Находим объект в нашем реактивном массиве
-  const itemIndex = rowData.value.findIndex(i => i.Article === orderData.selectedProduct);
+  // Находим товар по артикулу
+  const item = rowData.value.find(i => i.Article === orderData.selectedProduct);
   
-  if (itemIndex !== -1) {
-    // 1. Обновляем данные в массиве (создаем копию объекта для реактивности)
-    const updatedItem = { ...rowData.value[itemIndex] };
-    updatedItem.count = Number(updatedItem.count) - Number(orderData.count);
-    
-    // 2. Заменяем в массиве
-    rowData.value[itemIndex] = updatedItem;
-
-    // 3. Уведомляем AG Grid об изменениях через транзакцию (самый безопасный способ)
-    gridApi.value?.applyTransaction({ update: [updatedItem] });
-
-    // 4. Принудительно обновляем стили строк (чтобы сработал красный фон)
-    gridApi.value?.redrawRows();
+  if (!item) {
+    alert(t('inventory.loadError'));
+    return;
   }
-  gridApi.value?.applyColumnState({
-    defaultState: { sort: null } // сброс (опционально)
-    });
-  gridApi.value?.onSortChanged();
+
+  try {
+    // 1. Создаём заявку в БД через API
+    const requestData = {
+      inventoryItemId: parseInt(item.Number),  // ← Исправил: camelCase!
+      requestedQuantity: orderData.count,       // ← Исправил: camelCase!
+      reason: 'manual',
+      createdBy: orderData.requesterName || 'Пользователь'  // ← Исправил: camelCase!
+    };
+    
+    const response = await inventoryRequestApi.create(requestData);
+    console.log('Заявка создана в БД:', response.data);
+    
+    // 2. Уменьшаем запас в локальном массиве
+    const itemIndex = rowData.value.findIndex(i => i.Article === orderData.selectedProduct);
+    if (itemIndex !== -1) {
+      const updatedItem = { ...rowData.value[itemIndex] };
+      updatedItem.count = Number(updatedItem.count) - Number(orderData.count);
+      rowData.value[itemIndex] = updatedItem;
+      gridApi.value?.applyTransaction({ update: [updatedItem] });
+      gridApi.value?.redrawRows();
+    }
+    
+    alert(t('inventory.requestCreated'));
+  } catch (error) {
+    console.error('Ошибка при создании заявки:', error);
+    alert(t('inventory.requestError'));
+  }
 };
 
+// Загрузка товаров при монтировании компонента
+onMounted(() => {
+  loadInventoryFromDB();
+});
 
 // Функция, которая срабатывает при клике на строку или выборе
 const onSelectionChanged = (event) => {
@@ -296,12 +412,38 @@ const openAttachModal = () => {
 </script>
 
 <template>
-  <div v-if="isOrderList==false">
-
   <div class="manager-dashboard">
+    <!-- Заголовок с управлением вкладками -->
     <div class="header">
       <h2>{{ $t('store.title') }}</h2>
-      <div class="header-actions">
+      
+      <!-- Вкладки управления -->
+      <div class="store-tabs">
+        <button 
+          class="store-tab"
+          :class="{ active: storeTab === 'inventory' }"
+          @click="storeTab = 'inventory'"
+        >
+          📋 {{ t('inventory.currentStock') }}
+        </button>
+        <button 
+          class="store-tab"
+          :class="{ active: storeTab === 'requests' }"
+          @click="storeTab = 'requests'"
+        >
+          📦 {{ t('inventory.requestsTitle') }}
+        </button>
+        <button 
+          class="store-tab"
+          :class="{ active: storeTab === 'alerts' }"
+          @click="storeTab = 'alerts'"
+        >
+          🔔 {{ t('inventory.alertsTitle') }}
+        </button>
+      </div>
+      
+      <!-- Кнопки действий (только для вкладки inventory) -->
+      <div class="header-actions" v-if="storeTab === 'inventory'">
         <button 
           class="btn btn-edit" 
           :class="{ 'btn-pdf-active': isRowSelected }" 
@@ -322,14 +464,12 @@ const openAttachModal = () => {
 
         <button class="btn btn-ofer" @click="isOrderModalOpen = true" >{{ $t('store.createOrder') }}</button>
         <OrderModal v-model="isOrderModalOpen" :inventory="rowData" @submit="handleOrderSubmit" />
-        
-        <button class="btn btn-ofer-list" @click="isOrderList = true" >{{ $t('store.OrderList') }}</button>
-
       </div>
     </div>
-    <div class="btn-cap">
-      <!-- <button class="btn btn-edit" @click="addRow" >Редактировать</button> -->
-    </div>
+
+    <!-- Содержимое вкладок -->
+    <!-- Вкладка 1: Таблица товаров (существующее) -->
+    <div v-if="storeTab === 'inventory'" class="tab-content inventory-tab">
 
 
       <div class="ag-grid-wrapper">
@@ -354,22 +494,32 @@ const openAttachModal = () => {
         :pagination="true"
         :paginationPageSize="15"
         :paginationPageSizeSelector="[5, 10, 25, 50]"
-        @grid-ready="onGridReady"
+        @grid-ready="onCellReady"
         @selection-changed="onSelectionChanged"
         @cell-double-clicked="onCellDoubleClicked"
         @cell-value-changed="onCellValueChanged"
       />
     </div>
-  </div>
+    </div>
+
+    <!-- Вкладка 2: Заявки на пополнение -->
+    <div v-if="storeTab === 'requests'" class="tab-content requests-tab">
+      <InventoryRequestsList @back-to-inventory="storeTab = 'inventory'" />
+    </div>
+
+    <!-- Вкладка 3: Оповещения -->
+    <div v-if="storeTab === 'alerts'" class="tab-content alerts-tab">
+      <InventoryAlerts />
+    </div>
+
+    <!-- Modals -->
     <PdfModal 
       v-model="isPdfModalOpen" 
       :pdfUrl="selectedPdfUrl"
       :isEditMode="isEditPdfMode"
       @update-pdf="handleAttachPdf"
-      @update:modelValue="(val) => { if(!val) isEditPdfMode = false }" 
-/>
-    </div>
-  <OrderList v-if="isOrderList === true" />
+      @update:modelValue="(val) => { if(!val) isEditPdfMode = false }"/>
+  </div>
 </template>
   
 <style scoped>
@@ -382,19 +532,76 @@ const openAttachModal = () => {
   align-items: center;
   justify-content: space-between; /* Разносит заголовок и группу кнопок по краям */
   padding: 0 40px;                /* Горизонтальные отступы внутри хедера */
-  height: 100px;
+  height: auto;
+  min-height: 80px;
   border-radius: 30px;
   background-color: #fff;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid #eef0f2;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
 }
 
 .header h2 {
   margin: 0;
   font-size: 28px;
   color: #1e293b;
+  flex: 1;
+  min-width: 200px;
 }
+
+/* Вкладки внутри склада */
+.store-tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.store-tab {
+  padding: 8px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.store-tab:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.store-tab.active {
+  background: #10b981;
+  color: white;
+  border-color: #059669;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+/* Контент вкладок */
+.tab-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.requests-tab, .alerts-tab {
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
 
 /* Контейнер для кнопок */
 .header-actions {
@@ -513,4 +720,5 @@ const openAttachModal = () => {
   border: 1px solid #00000079;
 
 }
+
 </style>

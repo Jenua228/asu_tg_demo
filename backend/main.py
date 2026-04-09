@@ -997,5 +997,552 @@ def delete_repair_detail(detail_id):
         db.close()
 
 
+# ========== INVENTORY ITEMS (УПРАВЛЕНИЕ ЗАПАСАМИ ЗИП) ==========
+
+def inventory_item_to_dict(item):
+    """Преобразовать InventoryItem в JSON с расчетом доступного количества"""
+    db = SessionLocal()
+    try:
+        # Рассчитываем доступное количество = текущее - сумма активных заявок
+        active_requests = db.query(models.InventoryRequest).filter(
+            models.InventoryRequest.inventory_item_id == item.id,
+            models.InventoryRequest.status.in_(["новая", "в_процессе"])
+        ).all()
+        
+        requested_total = sum(req.requested_quantity for req in active_requests)
+        available_count = item.current_count - requested_total
+        
+        return {
+            "id": item.id,
+            "article": item.article,
+            "nameRus": item.name_rus,
+            "nameEng": item.name_eng,
+            "currentCount": item.current_count,
+            "minStock": item.min_stock,
+            "availableCount": available_count,  # Доступное количество с учетом активных заявок
+            "storageName": item.storage_name,
+            "comment": item.comment,
+            "pdfUrl": item.pdf_url,
+            "createdAt": item.created_at.isoformat() if item.created_at else None,
+            "updatedAt": item.updated_at.isoformat() if item.updated_at else None
+        }
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory", methods=["GET"])
+def get_inventory_items():
+    """Получить все товары со склада ЗИП"""
+    db = SessionLocal()
+    try:
+        items = db.query(models.InventoryItem).order_by(models.InventoryItem.article).all()
+        return jsonify([inventory_item_to_dict(item) for item in items])
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory/<int:item_id>", methods=["GET"])
+def get_inventory_item(item_id):
+    """Получить конкретный товар со склада"""
+    db = SessionLocal()
+    try:
+        item = db.query(models.InventoryItem).filter(models.InventoryItem.id == item_id).first()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        return jsonify(inventory_item_to_dict(item))
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory", methods=["POST"])
+def create_inventory_item():
+    """Создать новый товар на складе"""
+    db = SessionLocal()
+    try:
+        data = request.get_json()
+        
+        # Проверяем уникальность артикула
+        existing = db.query(models.InventoryItem).filter(
+            models.InventoryItem.article == data.get("article")
+        ).first()
+        
+        if existing:
+            return jsonify({"error": "Item with this article already exists"}), 400
+        
+        item = models.InventoryItem(
+            article=data.get("article"),
+            name_rus=data.get("nameRus"),
+            name_eng=data.get("nameEng"),
+            current_count=data.get("currentCount", 0),
+            min_stock=data.get("minStock", 0),
+            storage_name=data.get("storageName"),
+            comment=data.get("comment"),
+            pdf_url=data.get("pdfUrl")
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        return jsonify(inventory_item_to_dict(item)), 201
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory/<int:item_id>", methods=["PUT"])
+def update_inventory_item(item_id):
+    """Обновить товар на складе"""
+    db = SessionLocal()
+    try:
+        item = db.query(models.InventoryItem).filter(models.InventoryItem.id == item_id).first()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        
+        data = request.get_json()
+        
+        if "article" in data and data["article"] != item.article:
+            # Проверяем уникальность нового артикула
+            existing = db.query(models.InventoryItem).filter(
+                models.InventoryItem.article == data["article"]
+            ).first()
+            if existing:
+                return jsonify({"error": "Item with this article already exists"}), 400
+            item.article = data["article"]
+        
+        if "nameRus" in data:
+            item.name_rus = data["nameRus"]
+        if "nameEng" in data:
+            item.name_eng = data["nameEng"]
+        if "currentCount" in data:
+            item.current_count = data["currentCount"]
+        if "minStock" in data:
+            item.min_stock = data["minStock"]
+        if "storageName" in data:
+            item.storage_name = data["storageName"]
+        if "comment" in data:
+            item.comment = data["comment"]
+        if "pdfUrl" in data:
+            item.pdf_url = data["pdfUrl"]
+        
+        item.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(item)
+        return jsonify(inventory_item_to_dict(item))
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory/<int:item_id>", methods=["DELETE"])
+def delete_inventory_item(item_id):
+    """Удалить товар со склада"""
+    db = SessionLocal()
+    try:
+        item = db.query(models.InventoryItem).filter(models.InventoryItem.id == item_id).first()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        
+        db.delete(item)
+        db.commit()
+        return jsonify({"message": "Item deleted successfully"})
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory/check-low-stock", methods=["POST"])
+def check_low_stock():
+    """
+    Проверить товары с критически низким запасом
+    и автоматически создать заявки для пополнения
+    """
+    db = SessionLocal()
+    try:
+        items = db.query(models.InventoryItem).all()
+        low_stock_items = []
+        created_requests = []
+        
+        for item in items:
+            # Рассчитываем доступное количество
+            active_requests = db.query(models.InventoryRequest).filter(
+                models.InventoryRequest.inventory_item_id == item.id,
+                models.InventoryRequest.status.in_(["новая", "в_процессе"])
+            ).all()
+            requested_total = sum(req.requested_quantity for req in active_requests)
+            available_count = item.current_count - requested_total
+            
+            # Если доступное количество ниже минимума
+            if available_count < item.min_stock:
+                low_stock_items.append({
+                    "id": item.id,
+                    "article": item.article,
+                    "nameRus": item.name_rus,
+                    "currentCount": item.current_count,
+                    "minStock": item.min_stock,
+                    "availableCount": available_count
+                })
+                
+                # Создаём автоматическую заявку если её ещё нет
+                existing_auto_request = db.query(models.InventoryRequest).filter(
+                    models.InventoryRequest.inventory_item_id == item.id,
+                    models.InventoryRequest.reason == "auto",
+                    models.InventoryRequest.status.in_(["новая", "в_процессе"])
+                ).first()
+                
+                if not existing_auto_request:
+                    # Вычисляем необходимое количество для пополнения
+                    quantity_to_order = item.min_stock - available_count
+                    
+                    auto_request = models.InventoryRequest(
+                        inventory_item_id=item.id,
+                        requested_quantity=quantity_to_order,
+                        reason="auto",
+                        status="новая",
+                        created_by="system"
+                    )
+                    db.add(auto_request)
+                    db.flush()  # Получить ID заявки
+                    
+                    # Создаём оповещение
+                    alert = models.InventoryAlert(
+                        inventory_request_id=auto_request.id,
+                        alert_type="warning",
+                        event_type="auto_request_created",
+                        message=f"Автоматическая заявка на пополнение запаса: {item.name_rus} ({item.article}) - {quantity_to_order} шт."
+                    )
+                    db.add(alert)
+                    
+                    created_requests.append({
+                        "requestId": auto_request.id,
+                        "itemId": item.id,
+                        "itemArticle": item.article,
+                        "quantity": quantity_to_order
+                    })
+        
+        db.commit()
+        
+        return jsonify({
+            "lowStockItems": low_stock_items,
+            "createdAutoRequests": created_requests,
+            "message": f"Found {len(low_stock_items)} items with low stock"
+        })
+    finally:
+        db.close()
+
+
+# ========== INVENTORY REQUESTS (ЗАЯВКИ НА ПОПОЛНЕНИЕ) ==========
+
+def inventory_request_to_dict(req):
+    """Преобразовать InventoryRequest в JSON"""
+    item_data = {}
+    if req.inventory_item:
+        item_data = {
+            "id": req.inventory_item.id,
+            "article": req.inventory_item.article,
+            "nameRus": req.inventory_item.name_rus,
+            "nameEng": req.inventory_item.name_eng
+        }
+    
+    return {
+        "id": req.id,
+        "inventoryItem": item_data,
+        "requestedQuantity": req.requested_quantity,
+        "reason": req.reason,  # manual | auto
+        "status": req.status,  # новая|в_процессе|выполнена|отменена
+        "relatedRepairDetailId": req.related_repair_detail_id,
+        "relatedReportId": req.related_report_id,
+        "createdBy": req.created_by,
+        "notificationSent": req.notification_sent,
+        "plannedDeliveryDate": req.planned_delivery_date,
+        "actualDeliveryDate": req.actual_delivery_date,
+        "createdAt": req.created_at.isoformat() if req.created_at else None,
+        "updatedAt": req.updated_at.isoformat() if req.updated_at else None
+    }
+
+
+@app.route("/api/inventory-requests", methods=["GET"])
+def get_inventory_requests():
+    """Получить все заявки на пополнение запасов"""
+    db = SessionLocal()
+    try:
+        # Можно добавить фильтр по статусу через параметры запроса
+        status = request.args.get("status")
+        
+        query = db.query(models.InventoryRequest)
+        if status:
+            query = query.filter(models.InventoryRequest.status == status)
+        
+        requests = query.order_by(models.InventoryRequest.created_at.desc()).all()
+        return jsonify([inventory_request_to_dict(req) for req in requests])
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory-requests/<int:request_id>", methods=["GET"])
+def get_inventory_request(request_id):
+    """Получить конкретную заявку"""
+    db = SessionLocal()
+    try:
+        req = db.query(models.InventoryRequest).filter(models.InventoryRequest.id == request_id).first()
+        if not req:
+            return jsonify({"error": "Request not found"}), 404
+        return jsonify(inventory_request_to_dict(req))
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory-requests", methods=["POST"])
+def create_inventory_request():
+    """Создать новую заявку на пополнение запасов"""
+    db = SessionLocal()
+    try:
+        data = request.get_json()
+        
+        # Проверяем наличие товара
+        item = db.query(models.InventoryItem).filter(
+            models.InventoryItem.id == data.get("inventoryItemId")
+        ).first()
+        
+        if not item:
+            return jsonify({"error": "Inventory item not found"}), 404
+        
+        new_request = models.InventoryRequest(
+            inventory_item_id=data.get("inventoryItemId"),
+            requested_quantity=data.get("requestedQuantity"),
+            reason=data.get("reason", "manual"),  # manual | auto
+            status="новая",
+            related_repair_detail_id=data.get("relatedRepairDetailId"),
+            related_report_id=data.get("relatedReportId"),
+            created_by=data.get("createdBy", "user"),
+            planned_delivery_date=data.get("plannedDeliveryDate")
+        )
+        
+        db.add(new_request)
+        db.flush()  # Получить ID
+        
+        # Создаём уведомление
+        alert = models.InventoryAlert(
+            inventory_request_id=new_request.id,
+            alert_type="info",
+            event_type="new_request",
+            message=f"Новая заявка на пополнение: {item.name_rus} ({item.article}) - {data.get('requestedQuantity')} шт."
+        )
+        db.add(alert)
+        
+        new_request.notification_sent = True
+        
+        db.commit()
+        db.refresh(new_request)
+        return jsonify(inventory_request_to_dict(new_request)), 201
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory-requests/<int:request_id>", methods=["PUT"])
+def update_inventory_request(request_id):
+    """Обновить заявку (изменить статус, дату и т.д.)"""
+    db = SessionLocal()
+    try:
+        req = db.query(models.InventoryRequest).filter(
+            models.InventoryRequest.id == request_id
+        ).first()
+        
+        if not req:
+            return jsonify({"error": "Request not found"}), 404
+        
+        data = request.get_json()
+        
+        old_status = req.status
+        
+        if "status" in data:
+            req.status = data["status"]
+            
+            # При выполнении заявки обновляем количество товара (ПОПОЛНЕНИЕ!)
+            if data["status"] == "выполнена" and old_status != "выполнена":
+                item = req.inventory_item
+                if item:
+                    # ДОБАВЛЯЕМ количество товара на склад (это пополнение!)
+                    item.current_count += req.requested_quantity
+                    item.updated_at = datetime.utcnow()
+                    
+                    # Создаём оповещение о выполнении
+                    alert = models.InventoryAlert(
+                        inventory_request_id=req.id,
+                        alert_type="success",
+                        event_type="request_completed",
+                        message=f"Заявка выполнена: {item.name_rus} ({item.article}) выдано {req.requested_quantity} шт."
+                    )
+                    db.add(alert)
+        
+        if "requestedQuantity" in data:
+            req.requested_quantity = data["requestedQuantity"]
+        if "plannedDeliveryDate" in data:
+            req.planned_delivery_date = data["plannedDeliveryDate"]
+        if "actualDeliveryDate" in data:
+            req.actual_delivery_date = data["actualDeliveryDate"]
+        if "createdBy" in data:
+            req.created_by = data["createdBy"]
+        
+        req.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(req)
+        return jsonify(inventory_request_to_dict(req))
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory-requests/<int:request_id>", methods=["DELETE"])
+def delete_inventory_request(request_id):
+    """Удалить/отменить заявку"""
+    db = SessionLocal()
+    try:
+        req = db.query(models.InventoryRequest).filter(
+            models.InventoryRequest.id == request_id
+        ).first()
+        
+        if not req:
+            return jsonify({"error": "Request not found"}), 404
+        
+        req.status = "отменена"
+        db.commit()
+        
+        return jsonify({"message": "Request cancelled"})
+    finally:
+        db.close()
+
+
+# ========== INVENTORY ALERTS (ОПОВЕЩЕНИЯ) ==========
+
+def alert_to_dict(alert):
+    """Преобразовать Alert в JSON"""
+    return {
+        "id": alert.id,
+        "inventoryRequestId": alert.inventory_request_id,
+        "alertType": alert.alert_type,  # info|warning|critical|success
+        "eventType": alert.event_type,
+        "message": alert.message,
+        "isRead": alert.is_read,
+        "createdAt": alert.created_at.isoformat() if alert.created_at else None
+    }
+
+
+@app.route("/api/inventory-alerts", methods=["GET"])
+def get_inventory_alerts():
+    """Получить все оповещения по запасам"""
+    db = SessionLocal()
+    try:
+        # Можно добавить фильтры
+        unread_only = request.args.get("unread", "false").lower() == "true"
+        limit = int(request.args.get("limit", 50))
+        
+        query = db.query(models.InventoryAlert).order_by(models.InventoryAlert.created_at.desc())
+        
+        if unread_only:
+            query = query.filter(models.InventoryAlert.is_read == False)
+        
+        alerts = query.limit(limit).all()
+        return jsonify([alert_to_dict(alert) for alert in alerts])
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory-alerts/<int:alert_id>", methods=["PUT"])
+def mark_alert_as_read(alert_id):
+    """Отметить оповещение как прочитанное"""
+    db = SessionLocal()
+    try:
+        alert = db.query(models.InventoryAlert).filter(
+            models.InventoryAlert.id == alert_id
+        ).first()
+        
+        if not alert:
+            return jsonify({"error": "Alert not found"}), 404
+        
+        alert.is_read = True
+        db.commit()
+        db.refresh(alert)
+        return jsonify(alert_to_dict(alert))
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory-alerts/mark-all-read", methods=["POST"])
+def mark_all_alerts_read():
+    """Отметить все оповещения как прочитанные"""
+    db = SessionLocal()
+    try:
+        db.query(models.InventoryAlert).filter(
+            models.InventoryAlert.is_read == False
+        ).update({models.InventoryAlert.is_read: True})
+        db.commit()
+        return jsonify({"message": "All alerts marked as read"})
+    finally:
+        db.close()
+
+
+@app.route("/api/inventory-alerts/<int:alert_id>", methods=["DELETE"])
+def delete_alert(alert_id):
+    """Удалить оповещение"""
+    db = SessionLocal()
+    try:
+        alert = db.query(models.InventoryAlert).filter(
+            models.InventoryAlert.id == alert_id
+        ).first()
+        
+        if not alert:
+            return jsonify({"error": "Alert not found"}), 404
+        
+        db.delete(alert)
+        db.commit()
+        return jsonify({"message": "Alert deleted"})
+    finally:
+        db.close()
+
+
+# ========== STATISTICS & ANALYTICS FOR INVENTORY ==========
+
+@app.route("/api/inventory/stats/overview", methods=["GET"])
+def inventory_stats():
+    """Получить статистику по запасам"""
+    db = SessionLocal()
+    try:
+        all_items = db.query(models.InventoryItem).all()
+        
+        low_stock_count = 0
+        critical_stock_count = 0
+        total_value_approx = 0
+        
+        for item in all_items:
+            # Рассчитываем доступное
+            active_requests = db.query(models.InventoryRequest).filter(
+                models.InventoryRequest.inventory_item_id == item.id,
+                models.InventoryRequest.status.in_(["новая", "в_процессе"])
+            ).all()
+            requested_total = sum(req.requested_quantity for req in active_requests)
+            available = item.current_count - requested_total
+            
+            if available < item.min_stock:
+                low_stock_count += 1
+                if available <= 0:
+                    critical_stock_count += 1
+        
+        # Получаем статистику по заявкам
+        total_requests = db.query(models.InventoryRequest).count()
+        new_requests = db.query(models.InventoryRequest).filter(
+            models.InventoryRequest.status == "новая"
+        ).count()
+        
+        unread_alerts = db.query(models.InventoryAlert).filter(
+            models.InventoryAlert.is_read == False
+        ).count()
+        
+        return jsonify({
+            "totalItems": len(all_items),
+            "lowStockCount": low_stock_count,
+            "criticalStockCount": critical_stock_count,
+            "totalRequests": total_requests,
+            "newRequests": new_requests,
+            "unreadAlerts": unread_alerts
+        })
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)

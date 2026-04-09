@@ -76,4 +76,58 @@ export const repairDetailApi = {
   create: (reportId, data) => api.post(`/repair-details/${reportId}`, data)
 }
 
+// ==================== INVENTORY API (СКЛАД ЗИП) ====================
+
+export const inventoryApi = {
+  // Управление товарами на складе
+  getAll: () => api.get('/inventory'),
+  get: (id) => api.get(`/inventory/${id}`),
+  create: (item) => api.post('/inventory', item),
+  update: (id, item) => api.put(`/inventory/${id}`, item),
+  delete: (id) => api.delete(`/inventory/${id}`),
+  
+  // Проверка минимальных запасов и автоматическое создание заявок
+  checkLowStock: () => api.post('/inventory/check-low-stock')
+}
+
+// ==================== INVENTORY REQUESTS API (ЗАЯВКИ) ====================
+
+export const inventoryRequestApi = {
+  // Управление заявками на пополнение
+  getAll: () => api.get('/inventory-requests'),
+  getAllFiltered: (status) => api.get(`/inventory-requests?status=${status}`),
+  get: (id) => api.get(`/inventory-requests/${id}`),
+  create: (request) => api.post('/inventory-requests', request),
+  update: (id, request) => api.put(`/inventory-requests/${id}`, request),
+  delete: (id) => api.delete(`/inventory-requests/${id}`),
+  
+  // Удобные методы для обновления статуса
+  markAsInProcess: (id) => api.put(`/inventory-requests/${id}`, { status: 'в_процессе' }),
+  markAsCompleted: (id) => api.put(`/inventory-requests/${id}`, { status: 'выполнена' }),
+  markAsCancelled: (id) => api.put(`/inventory-requests/${id}`, { status: 'отменена' })
+}
+
+// ==================== INVENTORY ALERTS API (ОПОВЕЩЕНИЯ) ====================
+
+export const inventoryAlertApi = {
+  // Управление оповещениями
+  getAll: () => api.get('/inventory-alerts'),
+  getUnread: () => api.get('/inventory-alerts?unread=true'),
+  getAllLimited: (limit) => api.get(`/inventory-alerts?limit=${limit}`),
+  
+  // Отметить как прочитанное
+  markAsRead: (id) => api.put(`/inventory-alerts/${id}`, { isRead: true }),
+  markAllAsRead: () => api.post('/inventory-alerts/mark-all-read'),
+  
+  // Удалить оповещение
+  delete: (id) => api.delete(`/inventory-alerts/${id}`)
+}
+
+// ==================== INVENTORY STATISTICS API ====================
+
+export const inventoryStatsApi = {
+  // Получить статистику по запасам
+  getOverview: () => api.get('/inventory/stats/overview')
+}
+
 export default api

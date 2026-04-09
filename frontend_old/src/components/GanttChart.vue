@@ -1,0 +1,2956 @@
+<template>
+  <div 
+    class="gantt-container" 
+    ref="containerRef" 
+    @click="handleContainerClick"
+  >
+    <!-- Task Sidebar -->
+    <div 
+      class="gantt-sidebar" 
+      :style="{ width: sidebarSize + 'px' }"
+    >
+      <div class="sidebar-header2" :class="{ 'with-months': scale === 'day' }">
+        <div class="sidebar-header2-left">
+          <span>
+          <span>{{ $t('detail.columns.stageName') }}</span>
+          <span class="task-count">{{ tasks.length }}</span>
+        </span>
+          <span class="total-days">{{ $t('detail.totalDays') }} {{ totalDays }}</span>
+        </div>
+        <div class="sidebar-header2-controls">
+          <button 
+            v-if="!hideExpandButton"
+            class="sidebar-toggle-btn" 
+            @click="toggleSidebarExpanded"
+            :title="sidebarExpanded ? $t('sidebar.collapseColumns') : $t('sidebar.showAllColumns')"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      
+      <!-- Table Header -->
+      <div class="sidebar-table-header" v-if="sidebarExpanded">
+        <div class="table-col col-name">{{ $t('reports.tableColumns.nameRETIndex') }}</div>
+        <div class="table-col col-dates">{{ $t('taskModal.startDate') }}</div>
+        <div class="table-col col-end-date">{{ $t('taskModal.endDate') }}</div>
+        <div class="table-col col-division">{{ $t('detail.columns.division') }}</div>
+        <div class="table-col col-status">{{ $t('detail.columns.status') }}</div>
+        <div class="table-col col-predecessors">{{ $t('sidebar.predecessors') }}</div>
+        <div class="table-col col-successors">{{ $t('sidebar.successors') }}</div>
+        <div class="table-col col-planned-hours">{{ $t('detail.columns.plannedPeople') }}</div>
+        <div class="table-col col-spent-hours">{{ $t('detail.columns.spentPeople') }}</div>
+        <div class="table-col col-actions"></div>
+      </div>
+      
+      <div class="sidebar-content" ref="sidebarContentRef" @scroll="handleSidebarScroll">
+        <template v-for="task in visibleTasks" :key="task.id">
+          <div 
+            class="sidebar-task"
+            :class="{ 
+              'is-selected': selectedTaskIds.has(task.id),
+              'is-parent': hasChildren(task.id),
+              'is-child': task.parent_id != null,
+              'is-expanded': expandedTaskIds.has(task.id),
+              'sidebar-expanded': sidebarExpanded
+            }"
+            :style="{ 
+              borderLeftColor: task.color,
+              paddingLeft: task.parent_id ? '36px' : '20px'
+            }"
+            @click="handleSidebarTaskClick($event, task)"
+            @dblclick.stop="$emit('edit-task', task)"
+          >
+            <!-- Expand/Collapse button for parents -->
+            <button 
+              v-if="hasChildren(task.id)" 
+              class="expand-btn"
+              @click.stop="toggleExpand(task.id)"
+            >
+              <svg 
+                width="12" height="12" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                stroke-width="2"
+                :class="{ 'rotated': expandedTaskIds.has(task.id) }"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+            
+            <!-- Compact view (default) -->
+            <template v-if="!sidebarExpanded">
+              <div class="task-info">
+                <!-- <span class="task-id">ID: {{ task.id }}</span> -->
+                <!-- <span class="task-dates" v-if="task.start_date && task.end_date"> ({{ taskDuration(task) }} дн.)</span> -->
+                <span class="task-title">
+                  <span v-if="hasChildren(task.id)" class="parent-badge">{{ $t('sidebar.parent') }} ({{ taskDuration(task) }} дн.)</span>
+                  {{ task.title }}
+                </span>
+                <!-- <span class="task-dates">
+                  {{ formatDate(task.start_date) }} — {{ formatDate(task.end_date) }}
+                </span> -->
+                
+              </div>
+              <div class="task-actions">
+                <!--<button class="action-btn" @click.stop="$emit('edit-task', task)" :title="$t('task.edit')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>-->
+                <!--<button class="action-btn danger" @click.stop="$emit('delete-task', task.id)" :title="$t('task.delete')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>-->
+              </div>
+            </template>
+            
+            <!-- Expanded table view -->
+            <template v-else>
+              <div class="table-col col-name">
+                <span class="task-title-text">{{ task.title }}</span>
+              </div>
+              <div class="table-col col-dates">
+                {{ formatDateShort(task.start_date) }}
+              </div>
+              <div class="table-col col-end-date">
+                {{ formatDateShort(task.end_date) }}
+              </div>
+              <div class="table-col col-division">
+                {{ task.division || '—' }}
+              </div>
+              <div class="table-col col-status">
+                <span class="status-badge" :class="getStatusClass(task.status)">
+                 {{ task.status || 'предстоящая' }}
+                </span>
+              </div>
+              <div class="table-col col-planned-hours">
+                {{ task.planned_hours || '—' }}
+              </div>
+              <div class="table-col col-spent-hours">
+                {{ task.spent_hours || '—' }}
+              </div>
+              <div class="table-col col-predecessors">
+                <template v-if="getTaskPredecessors(task.id).length > 0">
+                  <span v-for="pred in getTaskPredecessors(task.id)" :key="pred.id" class="conn-task-name">
+                    {{ pred.taskName }}
+                  </span>
+                </template>
+                <span v-else class="no-connections">—</span>
+              </div>
+              <div class="table-col col-successors">
+                <template v-if="getTaskSuccessors(task.id).length > 0">
+                  <span v-for="succ in getTaskSuccessors(task.id)" :key="succ.id" class="conn-task-name">
+                    {{ succ.taskName }}
+                  </span>
+                </template>
+                <span v-else class="no-connections">—</span>
+              </div>
+              <!--<div class="table-col col-actions">
+                <button class="action-btn" @click.stop="$emit('edit-task', task)" :title="$t('task.edit')">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+                <button class="action-btn danger" @click.stop="$emit('delete-task', task.id)" :title="$t('task.delete')">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              </div>-->
+            </template>
+          </div>
+        </template>
+        <div v-if="tasks.length === 0" class="sidebar-empty">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          <p>{{ $t('sidebar.noTasks') }}</p>
+          <span>{{ $t('sidebar.noTasksHint') }}</span>
+        </div>
+      </div>
+      
+      <!-- Resize handle -->
+      <div 
+        class="sidebar-resize-handle"
+        @mousedown="startSidebarResize"
+      ></div>
+    </div>
+    
+    <!-- Gantt Timeline -->
+        <!-- Gantt Timeline -->
+    <div class="gantt-timeline" ref="timelineRef" @scroll="handleScroll" @wheel="handleWheel">
+      <!-- Timeline Header -->
+      <div class="timeline-header-wrapper" :style="{ width: timelineWidth + 'px' }">
+        <!-- Верхний ряд - месяцы (только для масштаба "day") -->
+        <div v-if="scale === 'day'" class="timeline-header-months">
+          <div 
+            v-for="(month, index) in monthGroups" 
+            :key="'month-' + index"
+            class="month-group"
+            :style="{ width: (month.days * cellWidth) + 'px' }"
+          >
+            <span class="month-label">{{ month.label }}</span>
+          </div>
+        </div>
+        
+        <!-- Нижний ряд - дни/недели/месяцы -->
+        <div class="timeline-header">
+          <div 
+            v-for="(unit, index) in timeUnits" 
+            :key="index"
+            class="time-unit"
+            :class="{ 'is-today': isToday(unit.date) }"
+            :style="{ width: cellWidth + 'px' }"
+          >
+            <span class="unit-label">{{ unit.label }}</span>
+            <span class="unit-sublabel">{{ unit.sublabel }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Grid and Tasks -->
+      <div class="timeline-body" :style="{ width: timelineWidth + 'px', minHeight: gridHeight + 'px' }">
+        <!-- Grid background -->
+        <div class="grid-background" :style="{ width: timelineWidth + 'px', height: gridHeight + 'px' }"></div>
+        
+        <!-- Parent-Children Group Backgrounds -->
+        <div 
+          v-for="group in childGroupBackgrounds" 
+          :key="'group-' + group.parentId"
+          class="child-group-background"
+          :style="{
+            top: group.top + 'px',
+            height: group.height + 'px',
+            width: timelineWidth + 'px',
+            borderLeftColor: group.color
+          }"
+        >
+          <div class="group-indicator" :style="{ backgroundColor: group.color }"></div>
+        </div>
+        
+        <!-- Grid Lines -->
+        <svg class="grid-lines" :width="timelineWidth" :height="gridHeight">
+          <!-- Vertical grid lines -->
+          <line 
+            v-for="(unit, index) in timeUnits" 
+            :key="'v-' + index"
+            :x1="index * cellWidth"
+            y1="0"
+            :x2="index * cellWidth"
+            :y2="gridHeight"
+            :class="{ 'grid-line': true, 'grid-line-strong': unit.isStrong }"
+          />
+          <!-- Horizontal grid lines -->
+          <line 
+            v-for="index in horizontalLinesCount" 
+            :key="'h-' + index"
+            x1="0"
+            :y1="(index - 1) * rowHeight"
+            :x2="timelineWidth"
+            :y2="(index - 1) * rowHeight"
+            class="grid-line"
+          />
+          <!-- Today marker -->
+          <line 
+            v-if="todayOffset !== null"
+            :x1="todayOffset"
+            y1="0"
+            :x2="todayOffset"
+            :y2="gridHeight"
+            class="today-line"
+          />
+        </svg>
+        
+        <!-- Connection Arrows (SVG Layer) -->
+        <svg class="connections-layer" :width="timelineWidth" :height="gridHeight" @mouseleave="hoveredConnectionId = null">
+          <defs>
+            <!-- Arrow markers for each connection -->
+            <marker 
+              v-for="conn in visibleConnections"
+              :key="'marker-' + conn.id"
+              :id="'arrowhead-' + conn.id"
+              markerWidth="10"
+              markerHeight="7"
+              refX="8"
+              refY="3.5"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <polygon points="0 0, 10 3.5, 0 7, 1.5 3.5" :fill="conn.arrow_color" />
+            </marker>
+            <!-- Start circle markers -->
+            <marker 
+              v-for="conn in visibleConnections"
+              :key="'start-marker-' + conn.id"
+              :id="'startpoint-' + conn.id"
+              markerWidth="6"
+              markerHeight="6"
+              refX="3"
+              refY="3"
+              orient="auto"
+            >
+              <circle cx="3" cy="3" r="2.5" :fill="conn.arrow_color" />
+            </marker>
+          </defs>
+          
+          <g 
+            v-for="conn in visibleConnections" 
+            :key="conn.id" 
+            class="connection-group"
+            :class="{ 
+              'is-hovered': hoveredConnectionId === conn.id,
+              'is-inherited': conn.isInherited 
+            }"
+            @mouseenter="hoveredConnectionId = conn.id"
+            @mouseleave="hoveredConnectionId = null"
+          >
+            <!-- Invisible wider path for easier clicking -->
+             <path
+              :d="getConnectionPath(conn)"
+              stroke="transparent"
+              stroke-width="16"
+              fill="none"
+              style="cursor: pointer;"
+              @click.stop="showConnectionInfo($event, conn)"
+              @contextmenu.prevent="$emit('delete-connection', conn.id)"
+            />
+            <!-- Visible path -->
+             <path
+              :d="getConnectionPath(conn)"
+              :stroke="conn.arrow_color"
+              :stroke-dasharray="getStrokeDashArray(conn.arrow_style)"
+              :stroke-width="hoveredConnectionId === conn.id ? 3 : 2"
+              fill="none"
+              :marker-start="`url(#startpoint-${conn.id})`"
+              :marker-end="`url(#arrowhead-${conn.id})`"
+              class="connection-path"
+            /> 
+          </g>
+          
+          <!-- Connection creation preview -->
+          <!-- <path
+            v-if="connectionPreview"
+            :d="connectionPreview"
+            stroke="var(--accent-primary)"
+            stroke-width="2"
+            stroke-dasharray="5,5"
+            fill="none"
+            opacity="0.7"
+          /> -->
+        </svg>
+        
+        <!-- Task Bars -->
+        <template v-for="task in displayTasks" :key="task.id">
+          <!-- Parent Task Bar (thin line when expanded) -->
+          <div 
+            v-if="task.isParent && task.isExpanded"
+            :ref="el => taskRefs[task.id] = el"
+            class="task-bar task-bar-parent"
+            :class="{ 
+              'is-dragging': isDragging && selectedTaskIds.has(task.id),
+              'is-selected': selectedTaskIds.has(task.id)
+            }"
+            :style="getParentTaskStyle(task)"
+            :title="getTaskTooltip(task)"
+            @mousedown="handleTaskMouseDown($event, task)"
+            @dblclick.stop="$emit('edit-task', task)"
+          >
+            <div class="parent-task-line" :style="{ backgroundColor: task.color }">
+              <button 
+                class="expand-toggle-btn parent-collapse-btn"
+                @click.stop="toggleExpand(task.id)"
+                @mousedown.stop
+                :title="$t('task.collapse')"
+              >▼</button>
+              <span class="parent-task-title">{{ task.title }}</span>
+            </div>
+          </div>
+          
+          <!-- Regular Task Bar (or collapsed parent) -->
+          <div 
+            v-else
+            :ref="el => taskRefs[task.id] = el"
+            class="task-bar"
+            :class="{ 
+              'is-dragging': isDragging && selectedTaskIds.has(task.id),
+              'is-connecting': connectingFrom?.id === task.id,
+              'is-selected': selectedTaskIds.has(task.id),
+              'is-parent-collapsed': task.isParent && !task.isExpanded,
+              'is-child-task': task.parent_id != null,
+              'is-overdue': task.status === 'просрочено',
+              'is-in-progress': task.status === 'в работе'
+            }"
+            :style="getTaskStyle(task)"
+            :title="getTaskTooltip(task)"
+            @mousedown="handleTaskMouseDown($event, task)"
+            @dblclick.stop="$emit('edit-task', task)"
+          >
+            <div class="task-progress" :style="{ width: task.progress + '%', backgroundColor: task.color }"></div>
+            
+            <div class="task-top-label">
+              {{ task.title }}
+              <span v-if="task.status" class="task-status-label" :style="{ color: getStatusLabelColor(task.status) }">
+                ({{ task.status }})
+              </span>
+            </div>
+
+            <div class="task-content" :ref="el => taskContentRefs[task.id] = el">
+              <span class="task-bar-title" :ref="el => taskTitleRefs[task.id] = el">
+                <button 
+                  v-if="task.isParent" 
+                  class="expand-toggle-btn"
+                  @click.stop="toggleExpand(task.id)"
+                  @mousedown.stop
+                  :title="task.isExpanded ? $t('task.collapse') : $t('task.expand')"
+                >
+                  {{ task.isExpanded ? '▼' : '▶' }}
+                </button>
+                
+              </span>
+              <span class="task-bar-progress">{{ task.progress }}</span>
+            </div>
+            
+            <!-- Floating label for tasks with overflow text -->
+            <div class="task-floating-label">
+              {{ task.title }}
+            </div>
+            
+            <!-- Connection handles -->
+            <!-- <div 
+              class="connection-handle handle-left" 
+              @mousedown.stop="startConnection($event, task, 'start')"
+              :title="$t('task.connectFromStart')"
+            ></div>
+            <div 
+              class="connection-handle handle-right"
+              @mousedown.stop="startConnection($event, task, 'end')"
+              :title="$t('task.connectFromEnd')"
+            ></div> -->
+            
+            <!-- Resize handles -->
+            <div 
+              class="resize-handle resize-left"
+              @mousedown.stop="startResize($event, task, 'left')"
+            ></div>
+            <div 
+              class="resize-handle resize-right"
+              @mousedown.stop="startResize($event, task, 'right')"
+            ></div>
+          </div>
+        </template>
+      </div>
+    </div>
+    
+    <!-- Connection Info Popup -->
+    <Transition name="popup">
+      <div v-if="connectionInfo" class="connection-popup" :style="connectionPopupStyle">
+        <div class="popup-header">
+          <span>{{ $t('connectionPopup.title') }}</span>
+          <button class="popup-close" @click="connectionInfo = null">×</button>
+        </div>
+        <div class="popup-content">
+          <div class="popup-row">
+            <span class="popup-label">{{ $t('connectionPopup.from') }}</span>
+            <span class="popup-value" :style="{ color: getTaskById(connectionInfo.from_task_id)?.color }">
+              {{ getTaskById(connectionInfo.from_task_id)?.title || $t('task.unknown') }}
+            </span>
+          </div>
+          <div class="popup-row">
+            <span class="popup-label">{{ $t('connectionPopup.to') }}</span>
+            <span class="popup-value" :style="{ color: getTaskById(connectionInfo.to_task_id)?.color }">
+              {{ getTaskById(connectionInfo.to_task_id)?.title || $t('task.unknown') }}
+            </span>
+          </div>
+          <div class="popup-row">
+            <span class="popup-label">{{ $t('connectionPopup.type') }}</span>
+            <span class="popup-value">{{ formatConnectionType(connectionInfo.arrow_type) }}</span>
+          </div>
+        </div>
+        <div class="popup-footer">
+          <button class="btn btn-secondary btn-sm" @click="$emit('edit-connection', connectionInfo); connectionInfo = null">
+            {{ $t('connectionPopup.edit') }}
+          </button>
+          <button class="btn btn-danger btn-sm" @click="$emit('delete-connection', connectionInfo.id); connectionInfo = null">
+            {{ $t('connectionPopup.delete') }}
+          </button>
+        </div>
+      </div>
+    </Transition>
+    
+    <!-- Selection count indicator -->
+    <div v-if="selectedTaskIds.size > 1" class="selection-indicator">
+      {{ $t('selection.tasksSelected') }} {{ selectedTaskIds.size }} {{ $t('selection.shiftClickHint') }}
+    </div>
+    
+    <!-- Zoom indicator -->
+    <div class="zoom-indicator" v-if="zoomLevel !== 1.0">
+      {{ Math.round(zoomLevel * 100) }}%
+    </div>
+    
+    <!-- Zoom hint -->
+    <div class="zoom-hint">
+      {{ $t('zoom.hint') }}
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { format, addDays, addWeeks, addMonths, startOfDay, differenceInDays, isToday as checkIsToday, parseISO } from 'date-fns'
+import { ru, enUS, ar } from 'date-fns/locale'
+import { ganttDataApi } from '../api'
+
+
+const { t, locale } = useI18n()
+const reportData = ref([])
+
+const loadReportData = async () => {
+  try {
+    reportData.value = await ganttDataApi.getAll()
+  } catch (error) {
+    console.error('Failed to load report data:', error)
+  }
+}
+
+// Get date-fns locale based on current language
+const dateFnsLocale = computed(() => {
+  switch (locale.value) {
+    case 'ru': return ru
+    case 'ar': return ar
+    default: return enUS
+  }
+})
+
+const getStatusClass = (status) => {
+  switch (status) {
+    case 'предстоящая': return 'status-not-started'
+    case 'выполняется': return 'status-in-progress'
+    case 'выполнено': return 'status-completed'
+    case 'отменено': return 'status-cancelled'
+    default: return 'status-not-started'
+  }
+}
+
+// Цвет текста статуса для подписи над задачей
+const getStatusLabelColor = (status) => {
+  switch (status) {
+    case 'выполнено': return '#22c55e'      // зелёный
+    case 'в работе': return '#f59e0b'        // оранжевый
+    case 'просрочено': return '#ef4444'      // красный
+    case 'предстоящая': return '#9ca3af'     // серый
+    default: return '#6b7280'                // серый по умолчанию
+  }
+}
+
+const props = defineProps({
+  tasks: { type: Array, default: () => [] },
+  connections: { type: Array, default: () => [] },
+  scale: { type: String, default: 'day' },
+  readonly: { type: Boolean, default: false },
+  selectedTaskId: { type: Number, default: null },
+  hideExpandButton: { type: Boolean, default: false }
+})
+
+const emit = defineEmits(['update-task', 'update-task-live', 'delete-task', 'create-connection', 'delete-connection', 'edit-task', 'edit-connection', 'change-scale', 'task-selected'])
+
+const containerRef = ref(null)
+const timelineRef = ref(null)
+const sidebarContentRef = ref(null)
+
+const taskRefs = reactive({})
+const taskContentRefs = reactive({})
+const taskTitleRefs = reactive({})
+
+// Selection state
+const selectedTaskIds = ref(new Set())
+const isDragging = ref(false)
+const dragStartPositions = ref({}) // Store initial positions of selected tasks
+const dragMouseMoved = ref(false) // Track if mouse actually moved during drag
+const dragStartPoint = ref({ x: 0, y: 0 }) // Track initial mouse position
+
+// Следим за внешним выбором задачи
+watch(() => props.selectedTaskId, (newId) => {
+  if (newId !== null) {
+    selectedTaskIds.value.clear()
+    selectedTaskIds.value.add(newId)
+  } else {
+    selectedTaskIds.value.clear()
+  }
+})
+
+const draggingTask = ref(null)
+const dragOffset = ref({ x: 0, y: 0 })
+const resizingTask = ref(null)
+const resizeDirection = ref(null)
+const connectingFrom = ref(null)
+const connectingType = ref(null)
+const connectionPreview = ref(null)
+const containerHeight = ref(600)
+const connectionInfo = ref(null)
+const connectionPopupPosition = ref({ x: 0, y: 0 })
+const hoveredConnectionId = ref(null)
+
+// Hierarchy expansion state
+const expandedTaskIds = ref(new Set())
+
+// Sidebar state
+const sidebarExpanded = ref(false) // Show all columns
+const sidebarSize = ref(280) // Width
+const isResizingSidebar = ref(false)
+
+const toggleSidebarExpanded = () => {
+  sidebarExpanded.value = !sidebarExpanded.value
+  // Adjust width when expanding
+  if (sidebarExpanded.value) {
+    sidebarSize.value = 850
+  } else {
+    sidebarSize.value = 280
+  }
+}
+
+const startSidebarResize = (event) => {
+  isResizingSidebar.value = true
+  document.addEventListener('mousemove', handleSidebarResize)
+  document.addEventListener('mouseup', stopSidebarResize)
+}
+
+const handleSidebarResize = (event) => {
+  if (!isResizingSidebar.value) return
+  const newWidth = event.clientX
+  sidebarSize.value = Math.max(200, Math.min(1400, newWidth))
+}
+
+const stopSidebarResize = () => {
+  isResizingSidebar.value = false
+  document.removeEventListener('mousemove', handleSidebarResize)
+  document.removeEventListener('mouseup', stopSidebarResize)
+}
+
+// Zoom state
+const zoomLevel = ref(1.0) // 1.0 = normal, affects cellWidth
+const MIN_ZOOM = 0.3
+const MAX_ZOOM = 3.0
+
+const rowHeight = 52
+const parentRowHeight = 16 // Thin line for expanded parents
+const topPadding = 20
+
+// Base cell widths for each scale
+const baseCellWidth = computed(() => {
+  switch (props.scale) {
+    case 'day': return 40
+    case 'week': return 100
+    case 'month': return 120
+    default: return 40
+  }
+})
+
+// Actual cell width with zoom applied
+const cellWidth = computed(() => {
+  return Math.round(baseCellWidth.value * zoomLevel.value)
+})
+
+// Handle mouse wheel zoom
+const handleWheel = (event) => {
+  if (!event.ctrlKey) return // Only zoom with Ctrl+wheel
+  
+  event.preventDefault()
+  
+  const delta = event.deltaY > 0 ? -0.1 : 0.1
+  const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel.value + delta))
+  
+  // Check if we should switch scales
+  const scales = ['month', 'week', 'day']
+  const currentScaleIndex = scales.indexOf(props.scale)
+  
+  // Switch to more detailed scale when zooming in past threshold
+  if (newZoom > 2.0 && currentScaleIndex > 0) {
+    emit('change-scale', scales[currentScaleIndex - 1])
+    zoomLevel.value = 1.0
+    return
+  }
+  
+  // Switch to less detailed scale when zooming out past threshold
+  if (newZoom < 0.5 && currentScaleIndex < scales.length - 1) {
+    emit('change-scale', scales[currentScaleIndex + 1])
+    zoomLevel.value = 1.0
+    return
+  }
+  
+  zoomLevel.value = newZoom
+}
+
+
+const totalDays = computed(() => {
+  // Собираем все непустые даты
+  const starts = props.tasks.map(s => s.start_date).filter(Boolean)
+  const ends = props.tasks.map(s => s.end_date).filter(Boolean)
+  if (!starts.length || !ends.length) return 0
+
+  // Преобразуем строки в объекты Date
+  const minStart = new Date(starts.sort()[0])
+  const maxEnd = new Date(ends.sort().reverse()[0])
+
+  // Разница в миллисекундах, переводим в дни и прибавляем 1 (чтобы включительно)
+  return Math.floor((maxEnd - minStart) / (1000 * 60 * 60 * 24)) + 1
+})
+
+
+
+// Calculate date range based on tasks
+const dateRange = computed(() => {
+  if (props.tasks.length === 0) {
+    const now = new Date()
+    return {
+      start: startOfDay(addDays(now, -7)),
+      end: startOfDay(addDays(now, 60))
+    }
+  }
+  
+  let minDate = new Date(props.tasks[0].start_date)
+  let maxDate = new Date(props.tasks[0].end_date)
+  
+  props.tasks.forEach(task => {
+    const start = new Date(task.start_date)
+    const end = new Date(task.end_date)
+    if (start < minDate) minDate = start
+    if (end > maxDate) maxDate = end
+  })
+  
+  return {
+    start: startOfDay(addDays(minDate, -7)),
+    end: startOfDay(addDays(maxDate, 14))
+  }
+})
+
+const sortedTasks = computed(() => {
+  return [...props.tasks].sort((a, b) => a.row_index - b.row_index)
+})
+
+// Map for O(1) task lookup - used in connection rendering
+const tasksMap = computed(() => {
+  const map = new Map()
+  props.tasks.forEach(t => map.set(t.id, t))
+  return map
+})
+
+// Children map for hierarchy
+const childrenMap = computed(() => {
+  const map = new Map()
+  props.tasks.forEach(t => {
+    if (t.parent_id) {
+      if (!map.has(t.parent_id)) {
+        map.set(t.parent_id, [])
+      }
+      map.get(t.parent_id).push(t)
+    }
+  })
+  // Sort children by row_index
+  map.forEach((children, parentId) => {
+    children.sort((a, b) => a.row_index - b.row_index)
+  })
+  return map
+})
+
+// Check if task has children
+const hasChildren = (taskId) => {
+  return childrenMap.value.has(taskId) && childrenMap.value.get(taskId).length > 0
+}
+
+// Get children of a task
+const getChildren = (taskId) => {
+  return childrenMap.value.get(taskId) || []
+}
+
+// Toggle expand/collapse
+const toggleExpand = (taskId) => {
+  if (expandedTaskIds.value.has(taskId)) {
+    expandedTaskIds.value.delete(taskId)
+  } else {
+    expandedTaskIds.value.add(taskId)
+  }
+}
+
+// Visible tasks in sidebar (hierarchical order)
+const visibleTasks = computed(() => {
+  const result = []
+  
+  // Get root tasks (no parent)
+  const rootTasks = props.tasks
+    .filter(t => !t.parent_id)
+    .sort((a, b) => a.row_index - b.row_index)
+  
+  // Add tasks recursively respecting expansion state
+  const addTasksRecursively = (tasks, depth = 0) => {
+    tasks.forEach(task => {
+      result.push(task)
+      if (hasChildren(task.id) && expandedTaskIds.value.has(task.id)) {
+        addTasksRecursively(getChildren(task.id), depth + 1)
+      }
+    })
+  }
+  
+  addTasksRecursively(rootTasks)
+  return result
+})
+
+const taskDuration = (task) => {
+  if (!task.start_date || !task.end_date) return ''
+  const start = new Date(task.start_date)
+  const end = new Date(task.end_date)
+  return Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
+}
+
+// Tasks visible on the Gantt chart (same as sidebar but with row positions)
+const displayTasks = computed(() => {
+  const result = []
+  let currentRow = 0
+  
+  const addTasksRecursively = (tasks, parentExpanded = true) => {
+    tasks.forEach(task => {
+      const isParent = hasChildren(task.id)
+      const isExpanded = expandedTaskIds.value.has(task.id)
+      
+      // Calculate display row
+      const displayTask = {
+        ...task,
+        displayRow: currentRow,
+        isParent,
+        isExpanded,
+        isChildVisible: parentExpanded
+      }
+      
+      result.push(displayTask)
+      currentRow++
+      
+      // Add children if expanded
+      if (isParent && isExpanded) {
+        addTasksRecursively(getChildren(task.id), true)
+      }
+    })
+  }
+  
+  // Get root tasks (no parent)
+  const rootTasks = props.tasks
+    .filter(t => !t.parent_id)
+    .sort((a, b) => a.row_index - b.row_index)
+  
+  addTasksRecursively(rootTasks)
+  return result
+})
+
+// Map task ID to display row for connections
+const taskDisplayRowMap = computed(() => {
+  const map = new Map()
+  displayTasks.value.forEach(t => map.set(t.id, t.displayRow))
+  return map
+})
+
+// Helper to get display row for a task
+const getTaskDisplayRow = (taskId) => {
+  return taskDisplayRowMap.value.get(taskId) ?? -1
+}
+
+// Set of visible task IDs
+const visibleTaskIds = computed(() => {
+  return new Set(displayTasks.value.map(t => t.id))
+})
+
+// Calculate backgrounds for child groups (to visually distinguish children from other tasks)
+const childGroupBackgrounds = computed(() => {
+  const groups = []
+  
+  displayTasks.value.forEach(task => {
+    if (task.isParent && task.isExpanded) {
+      const children = getChildren(task.id)
+      if (children.length === 0) return
+      
+      // Find the display rows of the children
+      const childRows = children
+        .map(child => getTaskDisplayRow(child.id))
+        .filter(row => row !== -1)
+      
+      if (childRows.length === 0) return
+      
+      const minRow = Math.min(...childRows)
+      const maxRow = Math.max(...childRows)
+      
+      groups.push({
+        parentId: task.id,
+        top: minRow * rowHeight + topPadding,
+        height: (maxRow - minRow + 1) * rowHeight,
+        color: task.color
+      })
+    }
+  })
+  
+  return groups
+})
+
+// Find the ancestor parent that is visible for a hidden task
+const getVisibleAncestor = (taskId) => {
+  const task = tasksMap.value.get(taskId)
+  if (!task) return null
+  
+  // If task is visible, return itself
+  if (visibleTaskIds.value.has(taskId)) {
+    return taskId
+  }
+  
+  // If task has a parent, check if parent is visible
+  if (task.parent_id) {
+    return getVisibleAncestor(task.parent_id)
+  }
+  
+  return null
+}
+
+// Get the appropriate child task for a connection to expanded parent
+// Based on connection type: connections to START go to earliest child, to END go to latest child
+const getChildForConnection = (parentId, connectionType, isFrom) => {
+  const children = getChildren(parentId)
+  if (children.length === 0) return parentId
+  
+  // Check if parent is expanded
+  if (!expandedTaskIds.value.has(parentId)) return parentId
+  
+  // Determine which child based on connection point
+  let targetChild = null
+  
+  if (isFrom) {
+    // Connection is FROM this parent - determine by connection type start point
+    // 'start-to-X' means from start of parent → use earliest child
+    // 'finish-to-X' means from end of parent → use latest child
+    if (connectionType.startsWith('start')) {
+      // From START - use earliest starting child
+      targetChild = children.reduce((earliest, child) => 
+        new Date(child.start_date) < new Date(earliest.start_date) ? child : earliest
+      )
+    } else {
+      // From FINISH - use latest ending child
+      targetChild = children.reduce((latest, child) => 
+        new Date(child.end_date) > new Date(latest.end_date) ? child : latest
+      )
+    }
+  } else {
+    // Connection is TO this parent - determine by connection type end point
+    // 'X-to-start' means to start of parent → use earliest child
+    // 'X-to-finish' means to end of parent → use latest child  
+    if (connectionType.endsWith('start')) {
+      // To START - use earliest starting child
+      targetChild = children.reduce((earliest, child) => 
+        new Date(child.start_date) < new Date(earliest.start_date) ? child : earliest
+      )
+    } else {
+      // To FINISH - use latest ending child
+      targetChild = children.reduce((latest, child) => 
+        new Date(child.end_date) > new Date(latest.end_date) ? child : latest
+      )
+    }
+  }
+  
+  return targetChild ? targetChild.id : parentId
+}
+
+// Connections with hidden tasks redirected to their visible parent
+// AND parent connections redirected to appropriate children when expanded
+const visibleConnections = computed(() => {
+  const result = []
+  const seenConnections = new Set()
+  
+  props.connections.forEach(conn => {
+    let fromTaskId = conn.from_task_id
+    let toTaskId = conn.to_task_id
+    
+    // First, handle hidden children → redirect to visible parent
+    const visibleFromId = getVisibleAncestor(fromTaskId)
+    const visibleToId = getVisibleAncestor(toTaskId)
+    
+    // Skip if either task has no visible ancestor
+    if (!visibleFromId || !visibleToId) return
+    
+    // Update with visible ancestors
+    fromTaskId = visibleFromId
+    toTaskId = visibleToId
+    
+    // Second, handle expanded parents → redirect to appropriate child
+    const fromTask = tasksMap.value.get(fromTaskId)
+    const toTask = tasksMap.value.get(toTaskId)
+    
+    // If FROM task is an expanded parent, redirect to appropriate child
+    if (fromTask && hasChildren(fromTaskId) && expandedTaskIds.value.has(fromTaskId)) {
+      fromTaskId = getChildForConnection(fromTaskId, conn.arrow_type, true)
+    }
+    
+    // If TO task is an expanded parent, redirect to appropriate child
+    if (toTask && hasChildren(toTaskId) && expandedTaskIds.value.has(toTaskId)) {
+      toTaskId = getChildForConnection(toTaskId, conn.arrow_type, false)
+    }
+    
+    // Skip self-connections
+    if (fromTaskId === toTaskId) return
+    
+    // Create unique key to avoid duplicate connections
+    const key = `${fromTaskId}-${toTaskId}-${conn.arrow_type}`
+    if (seenConnections.has(key)) return
+    seenConnections.add(key)
+    
+    // If connection is unchanged, use original
+    if (fromTaskId === conn.from_task_id && toTaskId === conn.to_task_id) {
+      result.push(conn)
+    } else {
+      // Create modified connection pointing to redirected tasks
+      result.push({
+        ...conn,
+        id: `redirected-${conn.id}-${fromTaskId}-${toTaskId}`,
+        from_task_id: fromTaskId,
+        to_task_id: toTaskId,
+        isInherited: true
+      })
+    }
+  })
+  
+  return result
+})
+
+const timeUnits = computed(() => {
+  const units = []
+  let current = new Date(dateRange.value.start)
+  const end = dateRange.value.end
+  const loc = dateFnsLocale.value
+  
+  while (current <= end) {
+    let label, sublabel, isStrong = false
+    
+    switch (props.scale) {
+      case 'day':
+        label = format(current, 'd', { locale: loc })
+        sublabel = format(current, 'EEE', { locale: loc })
+        isStrong = current.getDay() === 1
+        current = addDays(current, 1)
+        break
+      case 'week':
+        label = format(current, "'W'w", { locale: loc })
+        sublabel = format(current, 'MMM yyyy', { locale: loc })
+        isStrong = current.getDate() <= 7
+        current = addWeeks(current, 1)
+        break
+      case 'month':
+        label = format(current, 'MMM', { locale: loc })
+        sublabel = format(current, 'yyyy', { locale: loc })
+        isStrong = current.getMonth() === 0
+        current = addMonths(current, 1)
+        break
+    }
+    
+    units.push({ label, sublabel, date: new Date(current), isStrong })
+  }
+  
+  return units
+})
+
+// Группировка дней по месяцам для заголовка
+const monthGroups = computed(() => {
+  if (props.scale !== 'day') return []
+  
+  const groups = []
+  let currentMonth = null
+  let currentYear = null
+  let daysCount = 0
+  
+  const loc = dateFnsLocale.value
+  let current = new Date(dateRange.value.start)
+  const end = dateRange.value.end
+  
+  while (current <= end) {
+    const month = current.getMonth()
+    const year = current.getFullYear()
+    
+    if (currentMonth === null) {
+      currentMonth = month
+      currentYear = year
+      daysCount = 1
+    } else if (month === currentMonth && year === currentYear) {
+      daysCount++
+    } else {
+      // Сохраняем предыдущую группу
+      const monthDate = new Date(currentYear, currentMonth, 1)
+      groups.push({
+        label: format(monthDate, 'LLLL yyyy', { locale: loc }),
+        days: daysCount
+      })
+      // Начинаем новую группу
+      currentMonth = month
+      currentYear = year
+      daysCount = 1
+    }
+    
+    current = addDays(current, 1)
+  }
+  
+  // Добавляем последнюю группу
+  if (daysCount > 0) {
+    const monthDate = new Date(currentYear, currentMonth, 1)
+    groups.push({
+      label: format(monthDate, 'LLLL yyyy', { locale: loc }),
+      days: daysCount
+    })
+  }
+  
+  return groups
+})
+
+
+const timelineWidth = computed(() => timeUnits.value.length * cellWidth.value)
+
+const gridHeight = computed(() => {
+  const tasksHeight = displayTasks.value.length * rowHeight
+  return Math.max(tasksHeight + rowHeight * 5 + topPadding, containerHeight.value - 60)
+})
+
+const horizontalLinesCount = computed(() => {
+  return Math.ceil(gridHeight.value / rowHeight) + 1
+})
+
+const todayOffset = computed(() => {
+  const today = new Date()
+  if (today < dateRange.value.start || today > dateRange.value.end) return null
+  return getDateOffset(today)
+})
+
+const connectionPopupStyle = computed(() => ({
+  left: connectionPopupPosition.value.x + 'px',
+  top: connectionPopupPosition.value.y + 'px'
+}))
+
+const getDateOffset = (date) => {
+  const d = typeof date === 'string' ? parseISO(date) : date
+  
+  switch (props.scale) {
+    case 'day':
+      return differenceInDays(d, dateRange.value.start) * cellWidth.value
+    case 'week':
+      return (differenceInDays(d, dateRange.value.start) / 7) * cellWidth.value
+    case 'month':
+      return (differenceInDays(d, dateRange.value.start) / 30) * cellWidth.value
+    default:
+      return differenceInDays(d, dateRange.value.start) * cellWidth.value
+  }
+}
+
+const getTaskStyle = (task) => {
+  const left = getDateOffset(task.start_date)
+  const right = getDateOffset(task.end_date)
+  
+  // Если дата начала = дата окончания, ширина = 1 ячейка (cellWidth)
+  // Иначе — разница между датами, но минимум 1 ячейка
+  let width = right - left
+  if (width < cellWidth.value) {
+    width = cellWidth.value
+  }
+
+  // Use displayRow if available (from displayTasks), otherwise fall back to row_index
+  const row = task.displayRow !== undefined ? task.displayRow : task.row_index
+  const top = row * rowHeight + 8 + topPadding
+  
+  return {
+    left: `${left}px`,
+    width: `${width}px`,
+    top: `${top}px`,
+    '--task-color': task.color
+  }
+}
+
+// Style for expanded parent task (thin line spanning children)
+const getParentTaskStyle = (task) => {
+  // Get all children of this task
+  const children = getChildren(task.id)
+  if (children.length === 0) {
+    return getTaskStyle(task)
+  }
+  
+  // Calculate the span to cover all children
+  let minStart = new Date(task.start_date)
+  let maxEnd = new Date(task.end_date)
+  
+  children.forEach(child => {
+    const childStart = new Date(child.start_date)
+    const childEnd = new Date(child.end_date)
+    if (childStart < minStart) minStart = childStart
+    if (childEnd > maxEnd) maxEnd = childEnd
+  })
+  
+  const left = getDateOffset(minStart)
+  const right = getDateOffset(maxEnd)
+  
+  let width = right - left
+  if (width < cellWidth.value) {
+    width = cellWidth.value
+  }
+  
+  // Position at the top of the parent's row
+  const row = task.displayRow !== undefined ? task.displayRow : task.row_index
+  const top = row * rowHeight + 4 + topPadding
+  
+  return {
+    left: `${left}px`,
+    width: `${width}px`,
+    top: `${top}px`,
+    '--task-color': task.color
+  }
+}
+
+const formatDate = (date) => {
+  return format(new Date(date), 'MMM d, yyyy', { locale: dateFnsLocale.value })
+}
+
+const formatDateShort = (date) => {
+return format(new Date(date), 'dd.MM.yy', { locale: dateFnsLocale.value })}
+
+const getTaskDuration = (task) => {
+  const start = new Date(task.start_date)
+  const end = new Date(task.end_date)
+  return Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+}
+
+const getTaskConnections = (taskId) => {
+  const from = props.connections.filter(c => c.from_task_id === taskId).length
+  const to = props.connections.filter(c => c.to_task_id === taskId).length
+  return { from, to }
+}
+
+// Format connection type to Russian short form
+const formatConnectionTypeShort = (type) => {
+  const typeMap = {
+    'finish-to-start': 'FS',
+    'start-to-start': 'SS',
+    'finish-to-finish': 'FF',
+    'start-to-finish': 'SF'
+  }
+  return t(`connectionTypes.${typeMap[type]}`) || type
+}
+
+// Get predecessors (tasks that have arrows TO this task)
+// Uses the same redirection logic as visibleConnections
+const getTaskPredecessors = (taskId) => {
+  const result = []
+  const seen = new Set()
+  
+  // Check if this task is a child of an expanded parent - if so, it may inherit parent's connections
+  const task = tasksMap.value.get(taskId)
+  const parentId = task?.parent_id
+  const parentIsExpanded = parentId && expandedTaskIds.value.has(parentId)
+  
+  visibleConnections.value.forEach(conn => {
+    if (conn.to_task_id === taskId) {
+      const fromTask = tasksMap.value.get(conn.from_task_id)
+      const key = `${conn.from_task_id}-${conn.arrow_type}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({
+          id: conn.id,
+          taskName: fromTask?.title || t('task.unknown'),
+          type: formatConnectionTypeShort(conn.arrow_type)
+        })
+      }
+    }
+  })
+  
+  return result
+}
+
+// Get successors (tasks that this task has arrows TO)
+// Uses the same redirection logic as visibleConnections
+const getTaskSuccessors = (taskId) => {
+  const result = []
+  const seen = new Set()
+  
+  visibleConnections.value.forEach(conn => {
+    if (conn.from_task_id === taskId) {
+      const toTask = tasksMap.value.get(conn.to_task_id)
+      const key = `${conn.to_task_id}-${conn.arrow_type}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({
+          id: conn.id,
+          taskName: toTask?.title || t('task.unknown'),
+          type: formatConnectionTypeShort(conn.arrow_type)
+        })
+      }
+    }
+  })
+  
+  return result
+}
+
+const getTaskTooltip = (task) => {
+  const duration = getTaskDuration(task)
+  return `${task.title}\n${formatDate(task.start_date)} — ${formatDate(task.end_date)}\n${t('task.duration')}: ${duration} ${t('task.daysUnit')}\n${t('taskModal.progress')}: ${task.progress}%`
+}
+
+const isToday = (date) => {
+  return checkIsToday(date)
+}
+
+const getTaskById = (id) => {
+  return tasksMap.value.get(id)
+}
+
+const formatConnectionType = (type) => {
+  const typeMap = {
+    'finish-to-start': 'finishToStart',
+    'start-to-start': 'startToStart',
+    'finish-to-finish': 'finishToFinish',
+    'start-to-finish': 'startToFinish'
+  }
+  return t(`connectionTypes.${typeMap[type]}`) || type
+}
+
+const showConnectionInfo = (event, conn) => {
+  connectionInfo.value = conn
+  connectionPopupPosition.value = {
+    x: event.clientX - containerRef.value.getBoundingClientRect().left + 10,
+    y: event.clientY - containerRef.value.getBoundingClientRect().top + 10
+  }
+}
+
+const getStrokeDashArray = (style) => {
+  switch (style) {
+    case 'dashed': return '8,4'
+    case 'dotted': return '2,4'
+    default: return 'none'
+  }
+}
+
+// Improved connection path - arrows to right side come from right, not under task
+const getConnectionPath = (conn) => {
+  const fromTask = tasksMap.value.get(conn.from_task_id)
+  const toTask = tasksMap.value.get(conn.to_task_id)
+  
+  if (!fromTask || !toTask) return ''
+  
+  // Check if both tasks are visible
+  const fromRow = getTaskDisplayRow(conn.from_task_id)
+  const toRow = getTaskDisplayRow(conn.to_task_id)
+  
+  if (fromRow === -1 || toRow === -1) return '' // Task not visible
+  
+  let fromLeft = getDateOffset(fromTask.start_date)
+  let fromRight = getDateOffset(fromTask.end_date)
+  let toLeft = getDateOffset(toTask.start_date)
+  let toRight = getDateOffset(toTask.end_date)
+
+  // Для однодневных задач: правый край = левый край + ширина ячейки
+  if (fromRight - fromLeft < cellWidth.value) {
+    fromRight = fromLeft + cellWidth.value
+  }
+  if (toRight - toLeft < cellWidth.value) {
+    toRight = toLeft + cellWidth.value
+  }
+  
+  const fromY = fromRow * rowHeight + rowHeight / 2 + topPadding
+  const toY = toRow * rowHeight + rowHeight / 2 + topPadding
+  
+  let startX, startSide, endX, endSide
+  
+  switch (conn.arrow_type) {
+    case 'start-to-start':
+      startX = fromLeft
+      startSide = 'left'
+      endX = toLeft
+      endSide = 'left'
+      break
+    case 'finish-to-finish':
+      startX = fromRight
+      startSide = 'right'
+      endX = toRight
+      endSide = 'right'
+      break
+    case 'start-to-finish':
+      startX = fromLeft
+      startSide = 'left'
+      endX = toRight
+      endSide = 'right'
+      break
+    default: // finish-to-start
+      startX = fromRight
+      startSide = 'right'
+      endX = toLeft
+      endSide = 'left'
+  }
+  
+  const goingDown = toY > fromY
+  const goingUp = toY < fromY
+  const sameRow = Math.abs(toY - fromY) < 5
+  const vertDir = goingDown ? 1 : -1
+  
+  const routeOffset = 18
+  const r = 8 // corner radius
+  
+  // Same row - simple cases
+  if (sameRow) {
+    if (startSide === 'right' && endSide === 'left' && startX < endX - 20) {
+      return `M ${startX} ${fromY} L ${endX} ${toY}`
+    }
+    if (startSide === 'left' && endSide === 'right' && startX > endX + 20) {
+      return `M ${startX} ${fromY} L ${endX} ${toY}`
+    }
+    // Need detour
+    const detourY = fromY + rowHeight * 0.7
+    return buildPath(startX, fromY, endX, toY, startSide, endSide, detourY, r, routeOffset)
+  }
+  
+  // Finish-to-start forward
+  if (startSide === 'right' && endSide === 'left' && startX < endX - 30) {
+    const midX = startX + (endX - startX) / 2
+    return `M ${startX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${endX} ${toY}`
+  }
+  
+  // Start-to-start or Finish-to-finish (same sides)
+  if (startSide === endSide) {
+    const offset = startSide === 'left' ? -routeOffset : routeOffset
+    const turnX = startSide === 'left' 
+      ? Math.min(startX, endX) - routeOffset - 10
+      : Math.max(startX, endX) + routeOffset + 10
+    
+    return `M ${startX} ${fromY} L ${turnX} ${fromY} L ${turnX} ${toY} L ${endX} ${toY}`
+  }
+  
+  // Start-to-finish
+  if (startSide === 'left' && endSide === 'right') {
+    const exitX = startX - routeOffset
+    const entryX = endX + routeOffset
+    const midY = goingDown 
+      ? fromY + Math.abs(toY - fromY) / 2
+      : fromY - Math.abs(toY - fromY) / 2
+    
+    return `M ${startX} ${fromY} L ${exitX} ${fromY} L ${exitX} ${midY} L ${entryX} ${midY} L ${entryX} ${toY} L ${endX} ${toY}`
+  }
+  
+  // Finish-to-start backward
+  if (startSide === 'right' && endSide === 'left') {
+    const exitX = startX + routeOffset
+    const entryX = endX - routeOffset
+    const midY = goingDown 
+      ? fromY + Math.abs(toY - fromY) / 2
+      : fromY - Math.abs(toY - fromY) / 2
+    
+    return `M ${startX} ${fromY} L ${exitX} ${fromY} L ${exitX} ${midY} L ${entryX} ${midY} L ${entryX} ${toY} L ${endX} ${toY}`
+  }
+  
+  return `M ${startX} ${fromY} L ${endX} ${toY}`
+}
+
+const buildPath = (x1, y1, x2, y2, side1, side2, midY, r, offset) => {
+  const exit = side1 === 'right' ? x1 + offset : x1 - offset
+  const entry = side2 === 'right' ? x2 + offset : x2 - offset
+  return `M ${x1} ${y1} L ${exit} ${y1} L ${exit} ${midY} L ${entry} ${midY} L ${entry} ${y2} L ${x2} ${y2}`
+}
+
+// Handle clicks on container to deselect
+const handleContainerClick = (event) => {
+  if (event.target === containerRef.value || event.target.classList.contains('grid-background')) {
+    if (!event.shiftKey) {
+      selectedTaskIds.value.clear()
+    }
+  }
+  connectionInfo.value = null
+}
+
+// Handle sidebar task click with shift
+const handleSidebarTaskClick = (event, task) => {
+  if (event.shiftKey) {
+    // Shift+click: toggle in selection
+    if (selectedTaskIds.value.has(task.id)) {
+      selectedTaskIds.value.delete(task.id)
+    } else {
+      selectedTaskIds.value.add(task.id)
+      emit('task-selected', task.id)
+      emit('focus-table')
+    }
+  } else {
+    // Regular click: toggle if already selected, otherwise select only this
+    if (selectedTaskIds.value.has(task.id)) {
+      selectedTaskIds.value.delete(task.id)
+      emit('task-selected', null)
+    } else {
+      selectedTaskIds.value.clear()
+      selectedTaskIds.value.add(task.id)
+      emit('task-selected', task.id)
+      emit('focus-table')
+    }
+  }
+}
+
+// Handle task mousedown with shift for multi-select
+const handleTaskMouseDown = (event, task) => {
+  if (event.button !== 0) return
+
+  // Если уже перетаскиваем - выходим
+  if (isDragging.value) return
+  
+  if (event.shiftKey) {
+    // Shift+click: toggle in selection
+    if (selectedTaskIds.value.has(task.id)) {
+      selectedTaskIds.value.delete(task.id)
+    } else {
+      selectedTaskIds.value.add(task.id)
+    }
+    return
+  }
+  
+  // Regular click/drag
+  const wasSelected = selectedTaskIds.value.has(task.id)
+  
+  if (!wasSelected) {
+    // Clicking on unselected task - select only it and start drag
+    selectedTaskIds.value.clear()
+    selectedTaskIds.value.add(task.id)
+  }
+  
+  // Start dragging (will track if mouse actually moved)
+  startDrag(event, task, wasSelected)
+}
+
+// Drag handling for multiple tasks
+const startDrag = (event, task, wasAlreadySelected = false) => {
+  draggingTask.value = task
+  draggingTask.value._wasAlreadySelected = wasAlreadySelected // Track for deselect on click
+  isDragging.value = true
+  dragMouseMoved.value = false
+  dragStartPoint.value = { x: event.clientX, y: event.clientY }
+  
+  const taskEl = event.currentTarget
+  const rect = taskEl.getBoundingClientRect()
+  
+  dragOffset.value = {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  }
+  
+  // Store initial positions of all selected tasks
+  dragStartPositions.value = {}
+  selectedTaskIds.value.forEach(id => {
+    const t = tasksMap.value.get(id)
+    if (t) {
+      dragStartPositions.value[id] = {
+        start_date: new Date(t.start_date),
+        end_date: new Date(t.end_date),
+        row_index: t.row_index
+      }
+    }
+  })
+  
+  document.addEventListener('mousemove', handleDrag)
+  document.addEventListener('mouseup', stopDrag)
+}
+
+const handleDrag = (event) => {
+  if (!draggingTask.value || !timelineRef.value) return
+  
+  // Check if mouse actually moved (threshold of 5px)
+  const dx = event.clientX - dragStartPoint.value.x
+  const dy = event.clientY - dragStartPoint.value.y
+  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+    dragMouseMoved.value = true
+  }
+  
+  // Don't update positions until mouse actually moved
+  if (!dragMouseMoved.value) return
+  
+  const timelineRect = timelineRef.value.getBoundingClientRect()
+  const scrollLeft = timelineRef.value.scrollLeft
+  
+  const newX = event.clientX - timelineRect.left + scrollLeft - dragOffset.value.x
+  const newY = event.clientY - timelineRect.top - 60 - dragOffset.value.y
+  
+  // Calculate delta from original position of dragged task
+  const originalPos = dragStartPositions.value[draggingTask.value.id]
+  if (!originalPos) return
+  
+  const originalX = getDateOffset(originalPos.start_date)
+  const originalRowIndex = originalPos.row_index
+  
+  const deltaX = newX - originalX
+  const newRowIndex = Math.max(0, Math.round(newY / rowHeight))
+  const deltaRow = newRowIndex - originalRowIndex
+  
+  // Update all selected tasks (live update - local only, no server sync)
+  const updates = []
+  selectedTaskIds.value.forEach(id => {
+    const taskOriginal = dragStartPositions.value[id]
+    if (!taskOriginal) return
+    
+    const task = tasksMap.value.get(id)
+    const isChildTask = task && task.parent_id != null
+    
+    const duration = differenceInDays(taskOriginal.end_date, taskOriginal.start_date)
+    
+    let newStartDate
+    const originalTaskX = getDateOffset(taskOriginal.start_date)
+    const targetX = originalTaskX + deltaX
+    
+    switch (props.scale) {
+      case 'week':
+        newStartDate = addDays(dateRange.value.start, Math.round(targetX / cellWidth.value * 7))
+        break
+      case 'month':
+        newStartDate = addDays(dateRange.value.start, Math.round(targetX / cellWidth.value * 30))
+        break
+      default:
+        newStartDate = addDays(dateRange.value.start, Math.round(targetX / cellWidth.value))
+    }
+    
+    const newEndDate = addDays(newStartDate, duration)
+    // Child tasks don't change row_index (they're positioned relative to parent)
+    const taskNewRowIndex = isChildTask ? taskOriginal.row_index : Math.max(0, taskOriginal.row_index + deltaRow)
+    
+    updates.push({
+      id: id,
+      start_date: newStartDate.toISOString(),
+      end_date: newEndDate.toISOString(),
+      row_index: taskNewRowIndex
+    })
+  })
+  
+  // Emit all updates at once for batch processing
+  if (updates.length > 0) {
+    emit('update-task-live', updates)
+  }
+}
+
+const stopDrag = () => {
+  const wasAlreadySelected = draggingTask.value?._wasAlreadySelected
+  const taskId = draggingTask.value?.id
+  
+  // If mouse didn't move, this was a click - deselect if was already selected
+  if (!dragMouseMoved.value && wasAlreadySelected && taskId) {
+    selectedTaskIds.value.delete(taskId)
+  }
+  
+  // Emit final updates to save to server (only if mouse moved)
+  if (dragMouseMoved.value && draggingTask.value && Object.keys(dragStartPositions.value).length > 0) {
+    selectedTaskIds.value.forEach(id => {
+      const task = tasksMap.value.get(id)
+      if (task) {
+        emit('update-task', {
+          id: id,
+          start_date: task.start_date,
+          end_date: task.end_date,
+          row_index: task.row_index
+        })
+      }
+    })
+  }
+  
+  draggingTask.value = null
+  isDragging.value = false
+  dragMouseMoved.value = false
+  dragStartPositions.value = {}
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDrag)
+}
+
+// Resize handling
+const startResize = (event, task, direction) => {
+  // Select only this task when resizing
+  selectedTaskIds.value.clear()
+  selectedTaskIds.value.add(task.id)
+  
+  resizingTask.value = task
+  resizeDirection.value = direction
+  
+  document.addEventListener('mousemove', handleResize)
+  document.addEventListener('mouseup', stopResize)
+}
+
+const handleResize = (event) => {
+  if (!resizingTask.value || !timelineRef.value) return
+  
+  const timelineRect = timelineRef.value.getBoundingClientRect()
+  const scrollLeft = timelineRef.value.scrollLeft
+  const x = event.clientX - timelineRect.left + scrollLeft
+  
+  let newDate
+  switch (props.scale) {
+    case 'week':
+      newDate = addDays(dateRange.value.start, Math.round(x / cellWidth.value * 7))
+      break
+    case 'month':
+      newDate = addDays(dateRange.value.start, Math.round(x / cellWidth.value * 30))
+      break
+    default:
+      newDate = addDays(dateRange.value.start, Math.round(x / cellWidth.value))
+  }
+  
+  if (resizeDirection.value === 'left') {
+    if (newDate < new Date(resizingTask.value.end_date)) {
+      // Live update during resize (local only)
+      emit('update-task-live', [{
+        id: resizingTask.value.id,
+        start_date: newDate.toISOString()
+      }])
+    }
+  } else {
+    if (newDate > new Date(resizingTask.value.start_date)) {
+      // Live update during resize (local only)
+      emit('update-task-live', [{
+        id: resizingTask.value.id,
+        end_date: newDate.toISOString()
+      }])
+    }
+  }
+}
+
+const stopResize = () => {
+  // Emit final update to save to server
+  if (resizingTask.value) {
+    const task = tasksMap.value.get(resizingTask.value.id)
+    if (task) {
+      emit('update-task', {
+        id: task.id,
+        start_date: task.start_date,
+        end_date: task.end_date
+      })
+    }
+  }
+  
+  resizingTask.value = null
+  resizeDirection.value = null
+  document.removeEventListener('mousemove', handleResize)
+  document.removeEventListener('mouseup', stopResize)
+}
+
+// Connection creation
+const startConnection = (event, task, type) => {
+  connectingFrom.value = task
+  connectingType.value = type
+  
+  document.addEventListener('mousemove', handleConnectionDrag)
+  document.addEventListener('mouseup', stopConnection)
+}
+
+const handleConnectionDrag = (event) => {
+  if (!connectingFrom.value || !timelineRef.value) return
+  
+  const timelineRect = timelineRef.value.getBoundingClientRect()
+  const scrollLeft = timelineRef.value.scrollLeft
+  const scrollTop = timelineRef.value.scrollTop
+  
+  let fromLeft = getDateOffset(connectingFrom.value.start_date)
+  let fromRight = getDateOffset(connectingFrom.value.end_date)
+
+  // Для однодневных задач: правый край = левый край + ширина ячейки
+  if (fromRight - fromLeft < cellWidth.value) {
+    fromRight = fromLeft + cellWidth.value
+  }
+  
+  // Use displayRow for correct Y position (accounts for hierarchy)
+  const fromDisplayRow = getTaskDisplayRow(connectingFrom.value.id)
+  const fromY = fromDisplayRow !== -1 
+    ? fromDisplayRow * rowHeight + rowHeight / 2 + topPadding
+    : connectingFrom.value.row_index * rowHeight + rowHeight / 2
+  
+  const startX = connectingType.value === 'start' ? fromLeft : fromRight
+  const endX = event.clientX - timelineRect.left + scrollLeft
+  const endY = event.clientY - timelineRect.top - 60 + scrollTop
+  
+  connectionPreview.value = `M ${startX} ${fromY} L ${endX} ${endY}`
+}
+
+const stopConnection = (event) => {
+  if (connectingFrom.value && timelineRef.value) {
+    const timelineRect = timelineRef.value.getBoundingClientRect()
+    const scrollLeft = timelineRef.value.scrollLeft
+    const scrollTop = timelineRef.value.scrollTop
+    const x = event.clientX - timelineRect.left + scrollLeft
+    const y = event.clientY - timelineRect.top - 60 + scrollTop
+    const targetDisplayRow = Math.floor(y / rowHeight)
+    
+    // Find task by display row (accounts for hierarchy)
+    const targetTask = displayTasks.value.find(t => t.displayRow === targetDisplayRow)
+    
+    if (targetTask && targetTask.id !== connectingFrom.value.id) {
+      // Determine if dropped on start or end of target task
+      let targetLeft = getDateOffset(targetTask.start_date)
+      let targetRight = getDateOffset(targetTask.end_date)
+
+      // Для однодневных задач
+      if (targetRight - targetLeft < cellWidth.value) {
+        targetRight = targetLeft + cellWidth.value
+      }
+
+      const targetCenter = (targetLeft + targetRight) / 2
+      
+      // If drop point is closer to start, connect to start; otherwise to finish
+      const toEnd = x > targetCenter ? 'finish' : 'start'
+      const fromEnd = connectingType.value === 'start' ? 'start' : 'finish'
+      
+      const arrowType = `${fromEnd}-to-${toEnd}`
+      
+      emit('create-connection', {
+        from_task_id: connectingFrom.value.id,
+        to_task_id: targetTask.id,
+        arrow_type: arrowType
+      })
+    }
+  }
+  
+  connectingFrom.value = null
+  connectingType.value = null
+  connectionPreview.value = null
+  
+  document.removeEventListener('mousemove', handleConnectionDrag)
+  document.removeEventListener('mouseup', stopConnection)
+}
+
+const handleScroll = () => {
+  connectionInfo.value = null
+  hoveredConnectionId.value = null
+
+  // Синхронизируем вертикальную прокрутку таблицы с диаграммой
+  if (timelineRef.value && sidebarContentRef.value) {
+    sidebarContentRef.value.scrollTop = timelineRef.value.scrollTop
+  }
+}
+
+const handleSidebarScroll = () => {
+  // Синхронизируем вертикальную прокрутку диаграммы с таблицей
+  if (timelineRef.value && sidebarContentRef.value) {
+    timelineRef.value.scrollTop = sidebarContentRef.value.scrollTop
+  }
+}
+
+const updateContainerHeight = () => {
+  if (containerRef.value) {
+    containerHeight.value = containerRef.value.clientHeight
+  }
+}
+
+// Функция для выбора и прокрутки к задаче (вызывается извне)
+const selectAndScrollToTask = (taskId) => {
+  selectedTaskIds.value.clear()
+  selectedTaskIds.value.add(taskId)
+  
+  // Всегда прокручиваем к выбранной задаче
+  nextTick(() => {
+    if (timelineRef.value) {
+      const taskIndex = displayTasks.value.findIndex(t => t.id === taskId)
+      if (taskIndex !== -1) {
+        const containerRect = timelineRef.value.getBoundingClientRect()
+        // Центрируем задачу по вертикали
+        const targetScrollTop = taskIndex * rowHeight - containerRect.height / 2 + rowHeight
+        timelineRef.value.scrollTop = Math.max(0, targetScrollTop)
+        
+        // Также синхронизируем sidebar
+        if (sidebarContentRef.value) {
+          sidebarContentRef.value.scrollTop = timelineRef.value.scrollTop
+        }
+      }
+    }
+  })
+}
+
+// Expose функции для вызова из родителя
+defineExpose({
+  selectAndScrollToTask
+})
+
+onMounted(() => {
+  loadReportData()
+  updateContainerHeight()
+  window.addEventListener('resize', updateContainerHeight)
+  
+  if (todayOffset.value !== null && timelineRef.value) {
+    timelineRef.value.scrollLeft = Math.max(0, todayOffset.value - 200)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateContainerHeight)
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDrag)
+  document.removeEventListener('mousemove', handleResize)
+  document.removeEventListener('mouseup', stopResize)
+  document.removeEventListener('mousemove', handleConnectionDrag)
+  document.removeEventListener('mouseup', stopConnection)
+  document.removeEventListener('mousemove', handleSidebarResize)
+  document.removeEventListener('mouseup', stopSidebarResize)
+})
+
+</script>
+
+<style scoped>
+.gantt-container {
+  display: flex;
+  height: 100%;
+  background: var(--bg-primary);
+  position: relative;
+}
+
+/* Sidebar */
+.gantt-sidebar {
+  position: relative;
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.sidebar-header2 {
+  height: 40px;
+  margin-top: 10px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 10px;
+}
+
+.sidebar-header2.with-months {
+  height: 68px;  /* 28px + 40px */
+  align-items: center;
+  
+}
+
+.sidebar-header2-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-header2-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--bg-tertiary);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.task-count {
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--accent-primary);
+}
+
+/* Resize handle */
+.sidebar-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resize-handle:hover {
+  background: var(--accent-primary);
+}
+
+/* Table header */
+.sidebar-table-header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  overflow-x: auto;  /* ← ДОБАВИТЬ */
+  min-width: max-content;
+  white-space: nowrap;
+  min-width: 900px;
+}
+
+/* Table columns */
+.table-col {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;  /* Одинаковый размер текста везде */
+  box-sizing: border-box;
+}
+
+.col-id {
+  width: auto;
+  min-width: 50px;
+  text-align: center;
+  font-weight: 600;
+  color: #64748b;
+  flex-shrink: 0;
+}
+.col-name {width: 190px;  min-width: 150px; max-width: 190px; flex-shrink: 0;}
+.col-dates, .col-end-date { width: 110px; font-size: 11px; min-width: 80px; flex-shrink: 0;}
+.col-duration { width: auto; min-width: 40px; justify-content: center; font-size: 11px; flex-shrink: 0;}
+.col-division { 
+  width: 80px; 
+  min-width: 80px; 
+  max-width: 80px; 
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.col-status { 
+  width: 80px; 
+  min-width: 80px; 
+  max-width: 80px; 
+  flex-shrink: 0;
+  justify-content: center; 
+  font-size: 11px;
+}
+.col-planned-hours, .col-spent-hours { 
+  width: 60px; 
+  min-width: 60px; 
+  max-width: 60px; 
+  flex-shrink: 0;
+  font-size: 11px;
+  text-align: center;
+}
+.col-predecessors, .col-successors { 
+  width: 80px; 
+  min-width: 80px; 
+  max-width: 80px; 
+  flex-shrink: 0;
+  flex-direction: column; 
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 10px;
+  overflow: hidden;
+}
+.col-actions { width: 50px; justify-content: flex-end; gap: 2px; }
+
+/* Обёртка таблицы для синхронной прокрутки */
+.sidebar-table-wrapper {
+  display: flex;
+  flex-direction: column;
+  
+  overflow: hidden;
+}
+.sidebar-table-wrapper .sidebar-table-header {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sidebar-table-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Внутренний контейнер для горизонтальной прокрутки */
+.sidebar-table-inner {
+  min-width: max-content;
+}
+
+
+
+
+
+
+.connection-detail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.conn-task-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.conn-type {
+  font-size: 9px;
+  padding: 1px 4px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.no-connections {
+  color: var(--text-muted);
+}
+
+.sidebar-task.sidebar-expanded {
+  padding: 0 8px 0 36px;
+  min-width: max-content;  /* Минимальная ширина для всех колонок */
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.sidebar-task.sidebar-expanded .task-title-text {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  padding-top: 20px;
+  scrollbar-width: none;  
+  -ms-overflow-style: none;  
+}
+
+.sidebar-content::-webkit-scrollbar {
+  display: none; 
+}
+
+.sidebar-task {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 16px 0 20px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: all 0.15s ease;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sidebar-task:hover {
+  background: var(--bg-tertiary);
+}
+
+.sidebar-task.is-selected {
+  background: rgba(0, 212, 170, 0.1);
+  border-left-color: var(--accent-primary) !important;
+}
+
+/* Hierarchy styles for sidebar */
+.sidebar-task.is-parent {
+  background: var(--bg-secondary);
+}
+
+.sidebar-task.is-child {
+  background: var(--bg-secondary);
+  position: relative;
+}
+
+/* Selection must override parent/child backgrounds */
+.sidebar-task.is-selected.is-parent,
+.sidebar-task.is-selected.is-child {
+  background: rgba(0, 212, 170, 0.15) !important;
+}
+
+/* Visual connector line for child tasks in sidebar */
+.sidebar-task.is-child::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 0;
+  bottom: 50%;
+  width: 2px;
+  background: var(--border-subtle);
+}
+
+.sidebar-task.is-child::after {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  background: var(--border-subtle);
+}
+
+.sidebar-task.is-expanded {
+  border-bottom: none;
+}
+
+.expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-right: 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.expand-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.expand-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.expand-btn svg.rotated {
+  transform: rotate(90deg);
+}
+
+.parent-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+  letter-spacing: 0.5px;
+}
+
+.task-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.task-id {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.task-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-dates {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sidebar-task:hover .task-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  padding: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.action-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+}
+
+.sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px;
+}
+
+.sidebar-empty svg {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.sidebar-empty p {
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.sidebar-empty span {
+  font-size: 12px;
+}
+
+/* Timeline */
+.gantt-timeline {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.timeline-header {
+  display: flex;
+  height: 50px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.time-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.time-unit.is-today {
+  background: rgba(0, 212, 170, 0.1);
+}
+
+/* Текст СВЕРХУ задачи - всегда виден */
+.task-top-label {
+  position: absolute;
+  bottom: 100%;           /* над баром */
+  left: 0;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 
+    1px 1px 2px var(--bg-primary),
+    -1px -1px 2px var(--bg-primary),
+    1px -1px 2px var(--bg-primary),
+    -1px 1px 2px var(--bg-primary);
+}
+
+.task-status-label {
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Скрыть старый floating label */
+.task-floating-label {
+  display: none;
+}
+
+.unit-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.unit-sublabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.timeline-body {
+  position: relative;
+  padding-top: 20px; 
+}
+
+.grid-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--bg-primary);
+}
+
+/* Child group visual indicator */
+.child-group-background {
+  position: absolute;
+  left: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 4px solid transparent;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.group-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  opacity: 0.6;
+}
+
+/* Inherited connection style (dashed) */
+.connection-group.is-inherited .connection-path {
+  stroke-dasharray: 6, 3;
+  opacity: 0.7;
+}
+
+/* Grid */
+.grid-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.grid-line {
+  stroke: var(--grid-line);
+  stroke-width: 1;
+}
+
+.grid-line-strong {
+  stroke: var(--grid-line-strong);
+}
+
+.today-line {
+  stroke: var(--accent-primary);
+  stroke-width: 2;
+  stroke-dasharray: 4, 4;
+}
+
+/* Connections */
+.connections-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+
+.connection-group {
+  pointer-events: all;
+}
+
+.connection-path {
+  transition: stroke-width 0.1s ease;
+  pointer-events: none;
+}
+
+.connection-group.is-hovered .connection-path {
+  stroke-width: 3;
+}
+
+/* Task Bars */
+.task-bar {
+  position: absolute;
+  height: 32px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  overflow: visible;
+  transition: box-shadow 0.15s ease;
+  user-select: none;
+  z-index: 3;
+}
+
+/* .task-bar:hover {
+  box-shadow: 0 0 0 2px var(--task-color), var(--shadow-md);
+  z-index: 5;
+} */
+
+.task-bar.is-selected {
+  box-shadow: 0 0 0 2px var(--accent-primary);
+  z-index: 6;
+}
+
+/* Постоянная подсветка просроченных задач */
+.task-bar.is-overdue {
+  box-shadow: 0 0 0 2px #ef4444;  /* красная обводка */
+  z-index: 5;
+}
+
+/* Постоянная подсветка задач "в работе" */
+.task-bar.is-in-progress {
+  box-shadow: 0 0 0 2px #f59e0b;  /* оранжевая обводка */
+  z-index: 4;
+}
+
+/* Выбранная задача должна быть поверх статусной подсветки */
+.task-bar.is-selected.is-overdue,
+.task-bar.is-selected.is-in-progress {
+  box-shadow: 0 0 0 3px var(--accent-primary);
+  z-index: 6;
+}
+
+.task-bar.is-dragging {
+  cursor: grabbing;
+  box-shadow: 0 0 0 2px var(--accent-primary), var(--shadow-lg);
+  z-index: 100;
+  opacity: 0.9;
+}
+
+.task-bar.is-connecting {
+  box-shadow: 0 0 0 2px var(--accent-primary), var(--shadow-glow);
+}
+
+/* Parent task bar (thin line style when expanded) */
+.task-bar-parent {
+  position: absolute;
+  height: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  overflow: visible;
+  user-select: none;
+  z-index: 4;
+}
+
+.task-bar-parent:hover {
+  z-index: 6;
+}
+
+.parent-task-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 6px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+}
+
+.parent-collapse-btn {
+  font-size: 8px;
+  padding: 0 2px;
+  margin-right: 2px;
+  line-height: 1;
+  height: 12px;
+  min-width: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
+  border-radius: 2px;
+}
+
+.parent-collapse-btn:hover {
+  background: rgba(0,0,0,0.5);
+}
+
+.parent-task-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--bg-primary);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* Collapsed parent indicator */
+.task-bar.is-parent-collapsed {
+  border: 2px solid var(--task-color);
+}
+
+.parent-indicator {
+  font-size: 8px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+.expand-toggle-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 10px;
+  padding: 0 4px;
+  margin-right: 4px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.expand-toggle-btn:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+/* Child task visual styling */
+.task-bar.is-child-task {
+  border-left: 3px solid var(--task-color);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.task-bar.is-child-task::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  width: 9px;
+  height: 2px;
+  background: var(--task-color);
+  opacity: 0.5;
+}
+
+.task-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  opacity: 0.3;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.task-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 0 10px;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.task-bar-title {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.task-bar-progress {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Floating label - shows on hover when text overflows */
+.task-floating-label {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 8px;
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+  box-shadow: var(--shadow-md);
+}
+
+.task-bar:hover .task-floating-label {
+  opacity: 1;
+}
+
+/* Connection handles */
+.connection-handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 10;
+}
+
+.task-bar:hover .connection-handle {
+  opacity: 1;
+}
+
+.connection-handle:hover {
+  transform: translateY(-50%) scale(1.2);
+  background: var(--accent-primary);
+}
+
+.handle-left {
+  left: -6px;
+}
+
+.handle-right {
+  right: -6px;
+}
+
+/* Resize handles */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 5;
+}
+
+.resize-left {
+  left: 0;
+}
+
+.resize-right {
+  right: 0;
+}
+
+.resize-handle:hover {
+  background: rgba(0, 212, 170, 0.2);
+}
+
+/* Connection Info Popup */
+.connection-popup {
+  position: absolute;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 220px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.popup-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.popup-close:hover {
+  color: var(--text-primary);
+}
+
+.popup-content {
+  padding: 12px 16px;
+}
+
+.popup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.popup-row:last-child {
+  margin-bottom: 0;
+}
+
+.popup-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 40px;
+}
+
+.popup-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.popup-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  opacity: 0.9;
+}
+
+/* Selection indicator */
+.selection-indicator {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-primary);
+  color: var(--text-primary);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1000;
+  box-shadow: var(--shadow-md);
+}
+
+.zoom-indicator {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent-primary);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 1000;
+  box-shadow: var(--shadow-md);
+}
+
+.zoom-hint {
+  position: absolute;
+  bottom: 16px;
+  right: 80px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: 10px;
+  z-index: 1000;
+  box-shadow: var(--shadow-sm);
+  opacity: 0.7;
+}
+
+/* Popup animation */
+.popup-enter-active,
+.popup-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.popup-enter-from,
+.popup-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* Обёртка заголовка таймлайна */
+.timeline-header-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-secondary);
+}
+
+/* Строка месяцев */
+.timeline-header-months {
+  display: flex;
+  height: 28px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.month-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 2px solid var(--border-strong);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.month-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+</style>
