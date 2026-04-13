@@ -25,13 +25,14 @@
     
     <!-- Список оповещений -->
     <div class="alerts-list">
-      <div 
-        v-if="displayedAlerts.length > 0"
+      <template v-if="displayedAlerts.length > 0">
+       <div 
         v-for="alert in displayedAlerts"
         :key="alert.id"
         :class="['alert-item', `type-${alert.alertType}`, { unread: !alert.isRead }]"
         @click="markAlertAsRead(alert.id)"
-      >
+      > 
+      
         <div class="alert-icon">
           <span v-if="alert.alertType === 'info'">ℹ️</span>
           <span v-else-if="alert.alertType === 'warning'">⚠️</span>
@@ -54,6 +55,7 @@
           ✕
         </button>
       </div>
+    </template>
       
       <div v-else class="no-alerts">
         <p>{{ $t('inventory.noAlerts') }}</p>
@@ -90,16 +92,25 @@ const {
 const emit = defineEmits(['alerts-updated'])
 
 const displayedAlerts = computed(() => {
-  // Показываем последние 5 оповещений, непрочитанные в начале
-  return alerts.value
+
+  return(alerts.value.filter(a => a.message && a.message.trim().length > 0)  
     .sort((a, b) => {
       if (a.isRead === b.isRead) {
         return new Date(b.createdAt) - new Date(a.createdAt)
       }
       return a.isRead ? 1 : -1
     })
-    .slice(0, 5)
-})
+    .slice(0, 5));
+    
+  })
+
+console.log('📊 DISPLAYED ALERTS CALCULATION:')
+console.log('1️⃣ alerts.value ->', alerts.value.length, 'total', alerts.value.map(a => ({
+  msg: a.message ? `✓` : `❌`,
+  isRead: a.isRead
+})))
+
+
 
 const getTimeFromNow = (dateString) => {
   const now = new Date()
@@ -117,8 +128,8 @@ const handleMarkAllAsRead = async () => {
   emit('alerts-updated')
 }
 
-onMounted(() => {
-  startPolling()
+onMounted(async () => {
+  await startPolling()
 })
 
 onUnmounted(() => {

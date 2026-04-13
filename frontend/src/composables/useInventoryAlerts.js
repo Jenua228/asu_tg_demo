@@ -12,9 +12,10 @@ const alertsStore = {
 }
 
 export function useInventoryAlerts() {
-  const toast = useToast()
+  // const toast = useToast()
 
   const unreadCount = computed(() => {
+    //console.log('aaaaa', alertsStore.alerts.value.map(a => a.isRead));
     return alertsStore.alerts.value.filter(a => !a.isRead).length
   })
 
@@ -26,25 +27,20 @@ export function useInventoryAlerts() {
   const loadAlerts = async (showToast = true) => {
     try {
       const response = await inventoryAlertApi.getAllLimited(10)
-      const newAlerts = response.data || []
-      
+      const newAlerts = (response.data || []).filter(a => a.message && a.message.trim().length > 0)
+
+          
       // При первой загрузке просто запоминаем существующие оповещения, не показываем toast
       if (alertsStore.isFirstLoad) {
         newAlerts.forEach(alert => {
           alertsStore.lastAlertIds.add(alert.id)
         })
         alertsStore.isFirstLoad = false
-      } else if (showToast) {
-        // Проверяем на новые непрочитанные оповещения которых еще не были показаны как toast
+      } else {
+        // Нет toast notifications - просто добавляем в lastAlertIds
         for (const alert of newAlerts) {
           if (!alert.isRead && !alertsStore.lastAlertIds.has(alert.id)) {
-            // Это новое неприч оповещение
             alertsStore.lastAlertIds.add(alert.id)
-            // Показываем toast через глобальное хранилище
-            if (alert.message) {
-              const toastType = getToastType(alert.alertType)
-              toast.show(alert.message, toastType, 4000)
-            }
           }
         }
       }
@@ -53,7 +49,6 @@ export function useInventoryAlerts() {
       alertsStore.errorCount = 0 // Reset error counter on success
     } catch (error) {
       alertsStore.errorCount++
-      console.warn(`Alert loading error (${alertsStore.errorCount}):`, error.message)
       
       // Stop polling after 5 consecutive errors to prevent spamming
       if (alertsStore.errorCount >= 5) {
@@ -66,15 +61,15 @@ export function useInventoryAlerts() {
     }
   }
 
-  const getToastType = (alertType) => {
-    switch (alertType) {
-      case 'critical': return 'error'
-      case 'warning': return 'warning'
-      case 'success': return 'success'
-      case 'info':
-      default: return 'info'
-    }
-  }
+  // const getToastType = (alertType) => {
+  //   switch (alertType) {
+  //     case 'critical': return 'error'
+  //     case 'warning': return 'warning'
+  //     case 'success': return 'success'
+  //     case 'info':
+  //     default: return 'info'
+  //   }
+  // }
 
   const markAlertAsRead = async (alertId) => {
     try {
@@ -106,12 +101,15 @@ export function useInventoryAlerts() {
     }
   }
 
-  const startPolling = () => {
+  const startPolling = async () => {
     if (!alertsStore.updateInterval) {
-      loadAlerts(false) // Initial load without toast
+      await loadAlerts(false) // Initial load without toast
       alertsStore.updateInterval = setInterval(() => {
         loadAlerts(true) // Regular polling with toast for new alerts
       }, 10000)
+    }
+    else{
+      console.log('🟡 Polling already active')
     }
   }
 
@@ -121,6 +119,7 @@ export function useInventoryAlerts() {
       alertsStore.updateInterval = null
     }
   }
+
 
   return {
     // State

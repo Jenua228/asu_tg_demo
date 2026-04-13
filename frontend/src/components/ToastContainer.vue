@@ -2,12 +2,12 @@
   <div class="toast-container">
     <transition-group name="toast" tag="div" class="toasts-list">
       <ToastNotification
-        v-for="(toast, index) in toasts"
+        v-for="toast in toasts"
         :key="`toast-${toast.id}`"
         :message="toast.message"
         :type="toast.type"
-        :duration="0"
-        :style="{ transform: `translateY(${index * -80}px)` }"
+        :duration="4000"
+        
         @close="emit('remove', toast.id)"
       />
     </transition-group>
@@ -32,23 +32,24 @@ const emit = defineEmits(['remove'])
   position: fixed;
   bottom: 20px;
   right: 20px;
-  z-index: 9999;
+  z-index: 1000;
   pointer-events: none;
 }
 
 .toasts-list {
   display: flex;
-  flex-direction: column-reverse;
-  gap: 10px;
+  flex-direction: column;
+  gap: 12px;
   pointer-events: auto;
+  align-items: flex-end;
 }
-
+/* 
 .toasts-list > * {
   pointer-events: auto;
-}
+} */
 
 /* Animations for toast group */
-.toast-enter-active,
+/* .toast-enter-active,
 .toast-leave-active {
   transition: all 0.3s ease;
 }
@@ -65,5 +66,10 @@ const emit = defineEmits(['remove'])
 
 .toast-move {
   transition: transform 0.3s ease;
-}
+} */
+
+.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+.toast-enter-from { transform: translateX(100%); opacity: 0; }
+.toast-leave-to { transform: translateX(100%); opacity: 0; }
+.toast-move { transition: transform 0.3s ease; }
 </style>

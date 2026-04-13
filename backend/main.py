@@ -1199,6 +1199,9 @@ def check_low_stock():
                     )
                     db.add(auto_request)
                     db.flush()  # Получить ID заявки
+
+                    if not message or not message.strip():
+                        raise ValueError("Alert message cannot be empty")
                     
                     # Создаём оповещение
                     alert = models.InventoryAlert(
@@ -1316,7 +1319,9 @@ def create_inventory_request():
         
         db.add(new_request)
         db.flush()  # Получить ID
-        
+
+        if not message or not message.strip():
+                        raise ValueError("Alert message cannot be empty")
         # Создаём уведомление
         alert = models.InventoryAlert(
             inventory_request_id=new_request.id,
@@ -1357,11 +1362,14 @@ def update_inventory_request(request_id):
             # При выполнении заявки обновляем количество товара (ПОПОЛНЕНИЕ!)
             if data["status"] == "выполнена" and old_status != "выполнена":
                 item = req.inventory_item
+
                 if item:
                     # ДОБАВЛЯЕМ количество товара на склад (это пополнение!)
                     item.current_count += req.requested_quantity
                     item.updated_at = datetime.utcnow()
                     
+                    if not message or not message.strip():
+                        raise ValueError("Alert message cannot be empty")
                     # Создаём оповещение о выполнении
                     alert = models.InventoryAlert(
                         inventory_request_id=req.id,
@@ -1438,6 +1446,8 @@ def get_inventory_alerts():
             query = query.filter(models.InventoryAlert.is_read == False)
         
         alerts = query.limit(limit).all()
+        alerts = sorted(alerts, key=lambda x: (x.is_read, -x.created_at.timestamp()))
+        alerts = [a for a in alerts if a.message and a.message.strip()]
         return jsonify([alert_to_dict(alert) for alert in alerts])
     finally:
         db.close()

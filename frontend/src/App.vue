@@ -3,8 +3,8 @@ import { ref, computed, provide } from 'vue'
 import { token, logout } from './components/auth.js'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from './i18n'
-import { createToastStore, ToastKey } from './composables/useToast'
-import ToastContainer from './components/ToastContainer.vue'
+// import { createToastStore, ToastKey } from './composables/useToast'
+// import ToastContainer from './components/ToastContainer.vue'
 
 import ReportsView from './views/ReportsView.vue'
 import GanttView from './views/GanttView.vue'
@@ -23,8 +23,8 @@ const isSidebarCollapsed = ref(false)
 const { t, locale } = useI18n()
 
 // Инициализирую toast store
-const toastStore = createToastStore()
-provide(ToastKey, toastStore)
+// const toastStore = createToastStore()
+// provide(ToastKey, toastStore)
 
 // Поддерживаемые языки
 const languages = [
@@ -239,7 +239,7 @@ const sidebarWidth = computed(() => {
     </main>
     
     <!-- Global Toast Container -->
-    <ToastContainer :toasts="toastStore.toasts" @remove="toastStore.remove" />
+    <!-- <ToastContainer :toasts="toastStore.toasts" @remove="toastStore.remove" /> -->
   </div>
   <Login v-else />
 </template>

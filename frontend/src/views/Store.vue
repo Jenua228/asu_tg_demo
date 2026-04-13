@@ -413,9 +413,20 @@ onMounted(() => {
 });
 
 // Очистка интервалов при размонтировании
-watch(() => storeTab.value, () => {
+// watch(() => storeTab.value, () => {
+//   if (storeTab.value === 'alerts') {
+//     loadUnreadAlertsCount()
+//   }
+// })
+watch(() => storeTab.value, async () => {
   if (storeTab.value === 'alerts') {
     loadUnreadAlertsCount()
+    
+    // ← ДОБАВИТЬ: предзагрузка данных перед показом InventoryAlerts
+    // Получите доступ к alertsRef компонента
+    const alertsComponent = document.querySelector('[data-alerts-widget]')
+    if (alertsComponent) {
+    }
   }
 })
 

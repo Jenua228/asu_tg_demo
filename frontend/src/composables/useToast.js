@@ -8,7 +8,7 @@ export function useToast() {
   const toast = inject(ToastKey, null)
   
   if (!toast) {
-    console.warn('useToast must be used within a component that has provided the Toast context')
+    console.log('useToast must be used within a component that has provided the Toast context')
   }
   
   return toast || {
