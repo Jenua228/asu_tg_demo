@@ -1,62 +1,93 @@
-import { ref, inject } from 'vue'
+const DEFAULT_DURATION = 4000
+const TOAST_TYPES = ['success', 'error', 'info', 'warning']
 
-// Ключ для provide/inject
-export const ToastKey = Symbol('Toast')
+let toastId = 0
+const listeners = new Set()
 
-// Composable для использования в компонентах
-export function useToast() {
-  const toast = inject(ToastKey, null)
-  
-  if (!toast) {
-    console.log('useToast must be used within a component that has provided the Toast context')
-  } 
-  
-  return toast || {
-    show: () => console.warn('Toast context not available'),
-    success: () => console.warn('Toast context not available'),
-    error: () => console.warn('Toast context not available'),
-    warning: () => console.warn('Toast context not available'),
-    info: () => console.warn('Toast context not available')
+const normalizeType = (type) => {
+  return TOAST_TYPES.includes(type) ? type : 'info'
+}
+
+const normalizeToast = (message, type = 'info', duration = DEFAULT_DURATION) => {
+  const trimmedMessage = typeof message === 'string' ? message.trim() : String(message ?? '').trim()
+
+  if (!trimmedMessage) {
+    return null
+  }
+
+  toastId += 1
+
+  return {
+    id: toastId,
+    message: trimmedMessage,
+    type: normalizeType(type),
+    duration: Number.isFinite(duration) ? Math.max(duration, 0) : DEFAULT_DURATION
   }
 }
 
-// Функция для создания toast storage
+const notifyListeners = (event) => {
+  listeners.forEach((listener) => listener(event))
+}
+
+const show = (message, type = 'info', duration = DEFAULT_DURATION) => {
+  const toast = normalizeToast(message, type, duration)
+
+  if (!toast) {
+    return null
+  }
+
+  notifyListeners({
+    type: 'add',
+    toast
+  })
+
+  return toast.id
+}
+
+const clear = () => {
+  notifyListeners({
+    type: 'clear'
+  })
+}
+
+export const toast = {
+  show,
+  access(message, duration = DEFAULT_DURATION) {
+    return show(message, 'success', duration)
+  },
+  success(message, duration = DEFAULT_DURATION) {
+    return show(message, 'success', duration)
+  },
+  error(message, duration = DEFAULT_DURATION) {
+    return show(message, 'error', duration)
+  },
+  info(message, duration = DEFAULT_DURATION) {
+    return show(message, 'info', duration)
+  },
+  warning(message, duration = DEFAULT_DURATION) {
+    return show(message, 'warning', duration)
+  },
+  clear
+}
+
+export function useToast() {
+  return toast
+}
+
 export function createToastStore() {
-  const toasts = ref([])
+  return toast
+}
 
-  const show = (message, type = 'info', duration = 3000) => {
-    const id = Date.now() + Math.random()
-    const toast = { id, message, type, duration }
-    toasts.value.push(toast)
+export function subscribeToToasts(listener) {
+  listeners.add(listener)
 
-    if (duration > 0) {
-      setTimeout(() => {
-        remove(id)
-      }, duration)
-    }
-
-    return id
+  return () => {
+    listeners.delete(listener)
   }
+}
 
-  const remove = (id) => {
-    const index = toasts.value.findIndex(t => t.id === id)
-    if (index > -1) {
-      toasts.value.splice(index, 1)
-    }
-  }
-
-  const success = (message, duration = 3000) => show(message, 'success', duration)
-  const error = (message, duration = 3000) => show(message, 'error', duration)
-  const warning = (message, duration = 3000) => show(message, 'warning', duration)
-  const info = (message, duration = 3000) => show(message, 'info', duration)
-
-  return {
-    toasts,
-    show,
-    remove,
-    success,
-    error,
-    warning,
-    info
+export const ToastPlugin = {
+  install(app) {
+    app.config.globalProperties.$toast = toast
   }
 }

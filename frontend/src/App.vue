@@ -1,9 +1,8 @@
 <script setup>
-import { ref, computed, provide } from 'vue'
+import { ref, computed } from 'vue'
 import { token, logout } from './components/auth.js'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from './i18n'
-import { createToastStore, ToastKey } from './composables/useToast'
 import ToastContainer from './components/ToastContainer.vue'
 
 import ReportsView from './views/ReportsView.vue'
@@ -21,10 +20,6 @@ const currentView = ref('Dashboard')
 const selectedReportForDetail = ref(null)
 const isSidebarCollapsed = ref(false)
 const { t, locale } = useI18n()
-
-// Инициализирую toast store
-const toastStore = createToastStore()
-provide(ToastKey, toastStore)
 
 // Поддерживаемые языки
 const languages = [
@@ -239,7 +234,7 @@ const sidebarWidth = computed(() => {
     </main>
     
     <!-- Toast Container -->
-    <ToastContainer :toasts="toastStore.toasts" @remove="toastStore.remove" />
+    <ToastContainer />
   </div>
   <Login v-else />
 </template>

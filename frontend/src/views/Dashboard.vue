@@ -19,6 +19,19 @@
       </div>
     </div>
 
+    <div class="toast-demo">
+      <div class="toast-demo__text">
+        <h2>Проверка Toast</h2>
+        <p>Кнопки ниже вызывают все 4 вида тостов: `access`, `error`, `info`, `warning`.</p>
+      </div>
+      <div class="toast-demo__actions">
+        <button class="toast-demo__button success" @click="showAccessToast">Access</button>
+        <button class="toast-demo__button error" @click="showErrorToast">Error</button>
+        <button class="toast-demo__button info" @click="showInfoToast">Info</button>
+        <button class="toast-demo__button warning" @click="showWarningToast">Warning</button>
+      </div>
+    </div>
+
     <!-- Навигация -->
     <div class="dashboard-nav">
       <button 
@@ -85,7 +98,6 @@
     </div>
   </div>
 </template>
-src\components\dashboard
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -101,9 +113,11 @@ import ChartsIcon from '../components/dashboard/icons/ChartsIcon.vue'
 import BlocksIcon from '../components/dashboard/icons/BlocksIcon.vue'
 import TableIcon from '../components/dashboard/icons/TableIcon.vue'
 import GanttIcon from '../components/dashboard/icons/GanttIcon.vue'
+import { useToast } from '../composables/useToast'
 
 // Используем хранилище
 const store = useDashboardStore()
+const toast = useToast()
 
 // Локальные состояния
 const activeTab = ref('charts')
@@ -162,6 +176,22 @@ const closeModal = () => {
   selectedWorkshop.value = null
 }
 
+const showAccessToast = () => {
+  toast.access('Доступ подтвержден. Access toast работает корректно.')
+}
+
+const showErrorToast = () => {
+  toast.error('Произошла ошибка при выполнении действия.')
+}
+
+const showInfoToast = () => {
+  toast.info('Это информационное уведомление для быстрой проверки.')
+}
+
+const showWarningToast = () => {
+  toast.warning('Внимание: проверьте данные перед сохранением.')
+}
+
 // Инициализация при монтировании
 onMounted(() => {
   console.log('Дашборд загружен')
@@ -177,6 +207,67 @@ onMounted(() => {
 
 .dashboard-header {
   margin-bottom: 30px;
+}
+
+.toast-demo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.toast-demo__text h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  color: #1f2937;
+}
+
+.toast-demo__text p {
+  margin: 0;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.toast-demo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.toast-demo__button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.toast-demo__button:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.toast-demo__button.success {
+  background: #10b981;
+}
+
+.toast-demo__button.error {
+  background: #ef4444;
+}
+
+.toast-demo__button.info {
+  background: #3b82f6;
+}
+
+.toast-demo__button.warning {
+  background: #f59e0b;
 }
 
 .dashboard-header h1 {
@@ -286,6 +377,19 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .toast-demo {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toast-demo__actions {
+    width: 100%;
+  }
+
+  .toast-demo__button {
+    flex: 1 1 calc(50% - 5px);
+  }
+
   .header-stats {
     flex-direction: column;
     gap: 10px;
