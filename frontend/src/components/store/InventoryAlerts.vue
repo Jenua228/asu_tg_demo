@@ -104,14 +104,6 @@ const displayedAlerts = computed(() => {
     
   })
 
-console.log('📊 DISPLAYED ALERTS CALCULATION:')
-console.log('1️⃣ alerts.value ->', alerts.value.length, 'total', alerts.value.map(a => ({
-  msg: a.message ? `✓` : `❌`,
-  isRead: a.isRead
-})))
-
-
-
 const getTimeFromNow = (dateString) => {
   const now = new Date()
   const time = new Date(dateString)

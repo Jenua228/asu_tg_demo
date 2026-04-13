@@ -9,7 +9,7 @@ export function useToast() {
   
   if (!toast) {
     console.log('useToast must be used within a component that has provided the Toast context')
-  }
+  } 
   
   return toast || {
     show: () => console.warn('Toast context not available'),

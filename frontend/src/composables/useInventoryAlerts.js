@@ -12,10 +12,9 @@ const alertsStore = {
 }
 
 export function useInventoryAlerts() {
-  // const toast = useToast()
+  const toast = useToast()
 
   const unreadCount = computed(() => {
-    //console.log('aaaaa', alertsStore.alerts.value.map(a => a.isRead));
     return alertsStore.alerts.value.filter(a => !a.isRead).length
   })
 
@@ -29,7 +28,6 @@ export function useInventoryAlerts() {
       const response = await inventoryAlertApi.getAllLimited(10)
       const newAlerts = (response.data || []).filter(a => a.message && a.message.trim().length > 0)
 
-          
       // При первой загрузке просто запоминаем существующие оповещения, не показываем toast
       if (alertsStore.isFirstLoad) {
         newAlerts.forEach(alert => {
@@ -38,12 +36,24 @@ export function useInventoryAlerts() {
         alertsStore.isFirstLoad = false
       } else {
         // Нет toast notifications - просто добавляем в lastAlertIds
-        for (const alert of newAlerts) {
-          if (!alert.isRead && !alertsStore.lastAlertIds.has(alert.id)) {
-            alertsStore.lastAlertIds.add(alert.id)
-          }
-        }
-      }
+        // for (const alert of newAlerts) {
+        //   if (!alert.isRead && !alertsStore.lastAlertIds.has(alert.id)) {
+        //     alertsStore.lastAlertIds.add(alert.id)
+        //   }
+        // }
+         // Показываем toast для новых непрочитанных алертов
+          for (const alert of newAlerts) {
+        // Если алерт новый и непрочитанный – показываем уведомление
+            if (!alert.isRead && !alertsStore.lastAlertIds.has(alert.id)) {
+              const toastType = getToastType(alert.alertType)
+              //if (toast[toastType]) {
+                toast[toastType](alert.message)
+              //} //else {
+                //toast.info(alert.message)
+              //}
+              alertsStore.lastAlertIds.add(alert.id)
+            }
+      }}
       
       alertsStore.alerts.value = newAlerts
       alertsStore.errorCount = 0 // Reset error counter on success
@@ -61,15 +71,15 @@ export function useInventoryAlerts() {
     }
   }
 
-  // const getToastType = (alertType) => {
-  //   switch (alertType) {
-  //     case 'critical': return 'error'
-  //     case 'warning': return 'warning'
-  //     case 'success': return 'success'
-  //     case 'info':
-  //     default: return 'info'
-  //   }
-  // }
+  const getToastType = (alertType) => {
+    switch (alertType) {
+      case 'critical': return 'error'
+      case 'warning': return 'warning'
+      case 'success': return 'success'
+      case 'info':
+      default: return 'info'
+    }
+  }
 
   const markAlertAsRead = async (alertId) => {
     try {

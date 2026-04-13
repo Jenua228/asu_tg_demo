@@ -72,4 +72,5 @@ const emit = defineEmits(['remove'])
 .toast-enter-from { transform: translateX(100%); opacity: 0; }
 .toast-leave-to { transform: translateX(100%); opacity: 0; }
 .toast-move { transition: transform 0.3s ease; }
-</style>
+</style> 
+
