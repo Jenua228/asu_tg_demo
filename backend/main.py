@@ -1200,9 +1200,6 @@ def check_low_stock():
                     db.add(auto_request)
                     db.flush()  # Получить ID заявки
 
-                    if not message or not message.strip():
-                        raise ValueError("Alert message cannot be empty")
-                    
                     # Создаём оповещение
                     alert = models.InventoryAlert(
                         inventory_request_id=auto_request.id,
@@ -1320,8 +1317,8 @@ def create_inventory_request():
         db.add(new_request)
         db.flush()  # Получить ID
 
-        if not message or not message.strip():
-                        raise ValueError("Alert message cannot be empty")
+        # if not message or not message.strip():
+        #                 raise ValueError("Alert message cannot be empty")
         # Создаём уведомление
         alert = models.InventoryAlert(
             inventory_request_id=new_request.id,

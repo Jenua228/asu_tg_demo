@@ -374,7 +374,8 @@ const handleOrderSubmit = async (orderData) => {
     
     // Выводим результат
     if (successCount > 0 && errorCount === 0) {
-      alert(`✅ ${successCount} заявка(и) успешно созданы!`);
+      // alert(`✅ ${successCount} заявка(и) успешно созданы!`);
+      toast.access('Создана новая заявка')
     } else if (successCount > 0) {
       alert(`⚠️ Создано ${successCount} заявок(и), ошибок: ${errorCount}`);
     } else {
@@ -412,18 +413,10 @@ onMounted(() => {
   }, 10000)
 });
 
-// Очистка интервалов при размонтировании
-// watch(() => storeTab.value, () => {
-//   if (storeTab.value === 'alerts') {
-//     loadUnreadAlertsCount()
-//   }
-// })
 watch(() => storeTab.value, async () => {
   if (storeTab.value === 'alerts') {
     loadUnreadAlertsCount()
     
-    // ← ДОБАВИТЬ: предзагрузка данных перед показом InventoryAlerts
-    // Получите доступ к alertsRef компонента
     const alertsComponent = document.querySelector('[data-alerts-widget]')
     if (alertsComponent) {
     }

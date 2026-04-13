@@ -63,16 +63,19 @@
     </div>
     
     <!-- Ссылка на полный список -->
-    <div class="widget-footer">
+    <!-- <div class="widget-footer">
       <router-link to="/inventory-requests" class="link-view-all">
         {{ $t('inventory.viewAllRequests') }} →
       </router-link>
-    </div>
+    </div> -->
+    <button @click="showAll = !showAll" class="toggle-view-btn">
+       {{ showAll ? 'Показать только непрочитанные' : 'Показать все' }}
+    </button>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useInventoryAlerts } from '../../composables/useInventoryAlerts'
 
@@ -91,18 +94,31 @@ const {
 
 const emit = defineEmits(['alerts-updated'])
 
+const showAll = ref(false)
+
 const displayedAlerts = computed(() => {
 
-  return(alerts.value.filter(a => a.message && a.message.trim().length > 0)  
-    .sort((a, b) => {
+  let filtered = alerts.value.filter(a => a.message && a.message.trim().length > 0);
+  
+  if (!showAll.value) {
+    filtered = filtered.filter(a => !a.isRead)
+  }
+  return filtered.sort((a, b) => {
       if (a.isRead === b.isRead) {
         return new Date(b.createdAt) - new Date(a.createdAt)
       }
       return a.isRead ? 1 : -1
-    })
-    .slice(0, 5));
-    
-  })
+    }).slice(0, 5)
+  // return(alerts.value.filter(a => a.message && a.message.trim().length > 0)  
+  //   .filter(a => !a.isRead)
+  //   .sort((a, b) => {
+  //     if (a.isRead === b.isRead) {
+  //       return new Date(b.createdAt) - new Date(a.createdAt)
+  //     }
+  //     return a.isRead ? 1 : -1
+  //   })
+  //   .slice(0, 5));
+   })
 
 const getTimeFromNow = (dateString) => {
   const now = new Date()
@@ -200,6 +216,18 @@ defineExpose({
   font-weight: 600;
   font-size: 12px;
   color: white;
+}
+
+.toggle-view-btn{
+  padding: 5px 10px;
+  margin: auto;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  width: 250px;
 }
 
 .stat-badge.unread {
