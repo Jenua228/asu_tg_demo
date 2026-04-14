@@ -105,7 +105,7 @@
                   ✓
                 </button>
                 <button 
-                  @click="deleteRequest(req.id)"
+                  @click="updateRequestStatus(req.id, 'отменена')"
                   class="btn-delete"
                   :title="$t('inventory.cancel')"
                 >
@@ -282,13 +282,13 @@ const filteredRequests = computed(() => {
 // Разделяем заявки на актуальные и завершённые
 const activeRequests = computed(() => {
   return requests.value.filter(req => 
-    req.status === 'новая' || req.status === 'в_процессе'
+    req.status === 'новая' || req.status === 'в_процессе' || req.status === 'одобрена'
   )
 })
 
 const completedRequests = computed(() => {
   return requests.value.filter(req => 
-    req.status === 'выполнена' || req.status === 'отменена'
+    req.status === 'выполнена' || req.status === 'отменена' 
   )
 })
 
@@ -375,7 +375,7 @@ const updateDeliveryDate = async () => {
 }
 
 const deleteRequest = async (requestId) => {
-  if (!confirm(t('inventory.confirmCancel'))) return
+  if (!confirm(t('inventory.confirmDelete'))) return
   
   try {
     await inventoryRequestApi.delete(requestId)
@@ -636,6 +636,7 @@ onMounted(() => {
   padding: 12px;
   border-bottom: 1px solid #e5e7eb;
   font-size: 14px;
+  vertical-align: middle;
 }
 
 .requests-table tbody tr:hover {
@@ -683,8 +684,15 @@ onMounted(() => {
 }
 
 .actions-cell {
-  display: flex;
-  gap: 5px;
+  /* display: flex;
+  align-items: center;  
+  justify-content: center; 
+  height: 100%;  */
+  text-align: center;
+  vertical-align: middle;
+  min-width: 135px;
+  
+  /* gap: 5px; */
 }
 
 .btn-details,
@@ -693,7 +701,7 @@ onMounted(() => {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .btn-details:hover {
@@ -706,7 +714,7 @@ onMounted(() => {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   color: #10b981;
   font-weight: bold;
 }
@@ -721,7 +729,7 @@ onMounted(() => {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .btn-restore:hover {
@@ -862,6 +870,8 @@ onMounted(() => {
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 14px;
+  box-sizing: border-box;
+  height: 32px; 
   text-align: center;
 }
 
@@ -878,7 +888,7 @@ onMounted(() => {
   font-size: 14px;
   background: white;
   cursor: pointer;
-}
+  }
 
 .status-select:focus {
   outline: none;

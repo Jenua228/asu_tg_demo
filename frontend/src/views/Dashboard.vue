@@ -19,7 +19,7 @@
       </div>
     </div>
 
-    <div class="toast-demo">
+    <!-- <div class="toast-demo">
       <div class="toast-demo__text">
         <h2>Проверка Toast</h2>
         <p>Кнопки ниже вызывают все 4 вида тостов: `access`, `error`, `info`, `warning`.</p>
@@ -30,7 +30,7 @@
         <button class="toast-demo__button info" @click="showInfoToast">Info</button>
         <button class="toast-demo__button warning" @click="showWarningToast">Warning</button>
       </div>
-    </div>
+    </div> -->
 
     <!-- Навигация -->
     <div class="dashboard-nav">
