@@ -1404,11 +1404,10 @@ def delete_inventory_request(request_id):
         
         if not req:
             return jsonify({"error": "Request not found"}), 404
-        
-        req.status = "отменена"
+       
+        db.delete(req)
         db.commit()
-        
-        return jsonify({"message": "Request cancelled"})
+        return jsonify({'message': 'Request deleted'}), 200
     finally:
         db.close()
 

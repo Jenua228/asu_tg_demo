@@ -116,7 +116,7 @@ export function useInventoryAlerts() {
       await loadAlerts(false) // Initial load without toast
       alertsStore.updateInterval = setInterval(() => {
         loadAlerts(true) // Regular polling with toast for new alerts
-      }, 10000)
+      }, 5000)
     }
     else{
       console.log('🟡 Polling already active')

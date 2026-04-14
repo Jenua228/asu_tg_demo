@@ -218,11 +218,14 @@ const onCellValueChanged = async (event) => {
     };
     
     const dbId = updatedItem._dbId || parseInt(updatedItem.Number);
+    
     console.log('📤 Обновляю товар в БД (ID=' + dbId + '):', apiPayload);
     
     // Отправляем PUT запрос
     await inventoryApi.update(dbId, apiPayload);
     console.log('✅ Товар обновлён в БД');
+
+    await inventoryApi.checkLowStock()
   } catch (error) {
     console.error('❌ Ошибка при сохранении товара:', error);
     alert('Ошибка при сохранении: ' + error.message);
@@ -475,6 +478,12 @@ const openAttachModal = () => {
   isPdfModalOpen.value = true;
 };
 
+const inventoryRequestsListRef = ref(null)  // Добавьте ref для InventoryRequestsList
+const refreshRequestsInList = () => {
+  if (inventoryRequestsListRef.value) {
+    inventoryRequestsListRef.value.refreshRequests()
+  }
+}
 </script>
 
 <template>
@@ -573,7 +582,7 @@ const openAttachModal = () => {
 
     <!-- Вкладка 2: Заявки на пополнение -->
     <div v-if="storeTab === 'requests'" class="tab-content requests-tab">
-      <InventoryRequestsList @back-to-inventory="storeTab = 'inventory'" />
+      <InventoryRequestsList @back-to-inventory="storeTab = 'inventory'" ref="inventoryRequestsListRef" @inventory-updated="refreshRequestsInList"  />
     </div>
 
     <!-- Вкладка 3: Оповещения -->

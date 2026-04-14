@@ -109,20 +109,11 @@ const displayedAlerts = computed(() => {
       }
       return a.isRead ? 1 : -1
     }).slice(0, 5)
-  // return(alerts.value.filter(a => a.message && a.message.trim().length > 0)  
-  //   .filter(a => !a.isRead)
-  //   .sort((a, b) => {
-  //     if (a.isRead === b.isRead) {
-  //       return new Date(b.createdAt) - new Date(a.createdAt)
-  //     }
-  //     return a.isRead ? 1 : -1
-  //   })
-  //   .slice(0, 5));
-   })
+  })
 
 const getTimeFromNow = (dateString) => {
   const now = new Date()
-  const time = new Date(dateString)
+  const time = new Date(dateString + 'Z')
   const diff = Math.floor((now - time) / 1000) // в секундах
   
   if (diff < 60) return t('time.justNow')
@@ -136,9 +127,9 @@ const handleMarkAllAsRead = async () => {
   emit('alerts-updated')
 }
 
-onMounted(async () => {
-  await startPolling()
-})
+// onMounted(async () => {
+//   await startPolling()
+// })
 
 onUnmounted(() => {
   stopPolling()

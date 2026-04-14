@@ -317,7 +317,7 @@ const saveItem = async () => {
 const updateItemCount = async (item) => {
   try {
     await inventoryApi.update(item.id, { currentCount: item.currentCount })
-  } catch (error) {
+    } catch (error) {
     console.error('Ошибка при обновлении:', error)
   }
 }

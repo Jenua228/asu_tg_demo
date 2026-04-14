@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { token, logout } from './components/auth.js'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from './i18n'
@@ -15,6 +15,8 @@ import Dashboard from './views/Dashboard.vue'
 import Dashboard2 from './views/Dashboard2.vue'
 import Fault from './views/FaultAnalyze.vue'
 import Document from './views/Document.vue'
+import { useInventoryAlerts } from './composables/useInventoryAlerts'
+
 
 const currentView = ref('Dashboard')
 const selectedReportForDetail = ref(null)
@@ -45,6 +47,11 @@ const backFromDetail = () => {
   selectedReportForDetail.value = null
   currentView.value = 'reports'
 }
+
+const { startPolling } = useInventoryAlerts()
+onMounted(() => {
+  startPolling()  
+})
 
 // Переключение состояния меню
 const toggleSidebar = () => {

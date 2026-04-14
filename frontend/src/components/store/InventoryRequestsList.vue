@@ -124,7 +124,7 @@
 
     <!-- РАЗДЕЛ 2: ВЫПОЛНЕННЫЕ И ОТМЕНЁННЫЕ ЗАЯВКИ -->
     <div class="section-completed-requests">
-      <h3 class="section-title">✓ Выполненные / Отменённые заявки ({{ completedRequests.length }})</h3>
+      <h3 class="section-title">Выполненные / Отменённые заявки ({{ completedRequests.length }})</h3>
       
       <div class="requests-table-container" v-if="completedRequests.length > 0">
         <table class="requests-table">
@@ -334,6 +334,7 @@ const updateRequestStatus = async (requestId, newStatus) => {
     if (req) {
       req.status = newStatus
     }
+    
   } catch (error) {
     console.error('Ошибка при обновлении статуса:', error)
     alert(t('inventory.updateError'))
@@ -376,7 +377,6 @@ const updateDeliveryDate = async () => {
 
 const deleteRequest = async (requestId) => {
   if (!confirm(t('inventory.confirmDelete'))) return
-  
   try {
     await inventoryRequestApi.delete(requestId)
     requests.value = requests.value.filter(r => r.id !== requestId)
