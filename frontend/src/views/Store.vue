@@ -10,6 +10,7 @@ import OrderModal from '../components/store/OrderModal.vue'
 import PdfModal from '../components/store/PdfModal.vue'
 import { useI18n } from 'vue-i18n'
 import { inventoryApi, inventoryRequestApi, inventoryAlertApi } from '../api'
+import { useInventoryAlerts } from '../composables/useInventoryAlerts.js'
 
 import InventoryManagement from '../components/store/InventoryManagement.vue'
 import InventoryRequestsList from '../components/store/InventoryRequestsList.vue'
@@ -22,6 +23,7 @@ const { t } = useI18n()
 const storeTab = ref('inventory') // 'inventory' | 'requests' | 'alerts'
 const unreadAlertsCount = ref(0)
 let alertsUpdateInterval = null
+const { loadAlerts } = useInventoryAlerts()
 
 const props = defineProps({
   data: {
@@ -226,6 +228,8 @@ const onCellValueChanged = async (event) => {
     console.log('✅ Товар обновлён в БД');
 
     await inventoryApi.checkLowStock()
+    await loadAlerts()
+
   } catch (error) {
     console.error('❌ Ошибка при сохранении товара:', error);
     alert('Ошибка при сохранении: ' + error.message);
@@ -315,8 +319,6 @@ const handleAddItem = async (item) => {
   }
 };
 
-
-
 const handleOrderSubmit = async (orderData) => {
   console.log('Заказ оформлен:', orderData);
   
@@ -378,7 +380,9 @@ const handleOrderSubmit = async (orderData) => {
     // Выводим результат
     if (successCount > 0 && errorCount === 0) {
       // alert(`✅ ${successCount} заявка(и) успешно созданы!`);
-      toast.access('Создана новая заявка')
+      //toast.access('Создана новая заявка')
+      await inventoryApi.checkLowStock()
+      await loadAlerts()
     } else if (successCount > 0) {
       alert(`⚠️ Создано ${successCount} заявок(и), ошибок: ${errorCount}`);
     } else {
@@ -413,7 +417,7 @@ onMounted(() => {
   // Обновлять количество непрочитанных оповещений каждые 10 секунд
   alertsUpdateInterval = setInterval(() => {
     loadUnreadAlertsCount()
-  }, 10000)
+  }, 3000)
 });
 
 watch(() => storeTab.value, async () => {

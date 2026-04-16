@@ -335,6 +335,8 @@ const updateRequestStatus = async (requestId, newStatus) => {
       req.status = newStatus
     }
     
+    await loadAlerts()
+
   } catch (error) {
     console.error('Ошибка при обновлении статуса:', error)
     alert(t('inventory.updateError'))
@@ -376,7 +378,7 @@ const updateDeliveryDate = async () => {
 }
 
 const deleteRequest = async (requestId) => {
-  if (!confirm(t('inventory.confirmDelete'))) return
+  //if (!confirm(t('inventory.confirmDelete'))) return
   try {
     await inventoryRequestApi.delete(requestId)
     requests.value = requests.value.filter(r => r.id !== requestId)

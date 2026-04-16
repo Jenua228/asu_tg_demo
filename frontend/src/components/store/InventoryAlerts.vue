@@ -108,7 +108,7 @@ const displayedAlerts = computed(() => {
         return new Date(b.createdAt) - new Date(a.createdAt)
       }
       return a.isRead ? 1 : -1
-    }).slice(0, 5)
+    }).slice(0, 50)
   })
 
 const getTimeFromNow = (dateString) => {

@@ -25,7 +25,7 @@ export function useInventoryAlerts() {
   // Функция для загрузки оповещений с показом toast для новых
   const loadAlerts = async (showToast = true) => {
     try {
-      const response = await inventoryAlertApi.getAllLimited(10)
+      const response = await inventoryAlertApi.getAllLimited(50)
       const newAlerts = (response.data || []).filter(a => a.message && a.message.trim().length > 0)
 
       // При первой загрузке просто запоминаем существующие оповещения, не показываем toast
