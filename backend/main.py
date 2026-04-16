@@ -1023,6 +1023,7 @@ def inventory_item_to_dict(item):
             "storageName": item.storage_name,
             "comment": item.comment,
             "pdfUrl": item.pdf_url,
+            "imgName": item.image_Name,
             "unitMeasurement": getattr(item, 'unit_measurement', None) or "шт.",
             "createdAt": item.created_at.isoformat() if item.created_at else None,
             "updatedAt": item.updated_at.isoformat() if item.updated_at else None
@@ -1365,8 +1366,8 @@ def update_inventory_request(request_id):
                     item.current_count += req.requested_quantity
                     item.updated_at = datetime.utcnow()
                     
-                    if not message or not message.strip():
-                        raise ValueError("Alert message cannot be empty")
+                    # if not message or not message.strip():
+                    #     raise ValueError("Alert message cannot be empty")
                     # Создаём оповещение о выполнении
                     alert = models.InventoryAlert(
                         inventory_request_id=req.id,

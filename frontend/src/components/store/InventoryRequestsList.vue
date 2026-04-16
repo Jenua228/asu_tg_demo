@@ -157,7 +157,7 @@
               </td>
               <td>
                 <span :class="`status-badge status-${req.status}`">
-                  {{ req.status === 'выполнена' ? '✓ Выполнена' : '✕ Отменена' }}
+                  {{ req.status === 'выполнена' ? 'Выполнена' : '✕ Отменена' }}
                 </span>
               </td>
               <td class="date-cell">{{ formatDate(req.createdAt) }}</td>
@@ -427,6 +427,7 @@ const loadInventoryData = async () => {
       count: item.currentCount,
       min_sctock: item.minStock,
       name_storage: item.storageName,
+      imgName: item.imgName || '',
       comment: item.comment || '',
       pdfUrl: item.pdfUrl || '',
       _dbId: item.id

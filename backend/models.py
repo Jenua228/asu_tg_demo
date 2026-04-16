@@ -178,6 +178,7 @@ class InventoryItem(Base):
     article = Column(String(100), unique=True, nullable=False)  # Артикул
     name_rus = Column(String(500), nullable=False)  # Название на русском
     name_eng = Column(String(500), nullable=True)  # Название на английском
+    image_Name = Column('imgName', String(255), nullable=True)  # Имя файла картинки (например, "part123.jpg")
     current_count = Column(Integer, default=0)  # Текущее количество на складе
     min_stock = Column(Integer, default=0)  # Минимально допустимое количество
     storage_name = Column(String(200), nullable=True)  # Название склада/места хранения

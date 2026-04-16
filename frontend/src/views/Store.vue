@@ -243,13 +243,13 @@ const loadInventoryFromDB = async () => {
     rowData.value = response.data.map((item) => ({
       Number: item.id.toString(),
       Article: item.article,
-      num_rus: item.nameRus,      // ← Исправил: nameRus → num_rus
-      num_eng: item.nameEng,      // ← Исправил: nameEng → num_eng
-      count: item.currentCount,   // ← Исправил: currentCount → count
-      min_sctock: item.minStock,  // ← Исправил: minStock → min_sctock
-      name_storage: item.storageName,  // ← Исправил: storageName → name_storage
+      num_rus: item.nameRus,     
+      num_eng: item.nameEng,      
+      count: item.currentCount,   
+      min_sctock: item.minStock,  
+      name_storage: item.storageName, 
       comment: item.comment || '',
-      imgName: '',
+      imgName: item.imgName || '',
       pdfUrl: item.pdfUrl || '',
       _dbId: item.id // Сохраняем ID из БД
     }));
@@ -299,7 +299,7 @@ const handleAddItem = async (item) => {
       min_sctock: createdItem.minStock,  // ← Исправил: minStock → min_sctock
       name_storage: createdItem.storageName,  // ← Исправил: storageName → name_storage
       comment: createdItem.comment || '',
-      imgName: '',
+      imgName: createdItem.imgName || '',
       pdfUrl: createdItem.pdfUrl || '',
       _dbId: createdItem.id
     };
