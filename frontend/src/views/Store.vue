@@ -361,13 +361,13 @@ const handleOrderSubmit = async (orderData) => {
         successCount++;
         
         // Уменьшаем запас в локальном массиве
-        const itemIndex = rowData.value.findIndex(i => i.Number === inventoryItem.Number);
-        if (itemIndex !== -1) {
-          const updatedItem = { ...rowData.value[itemIndex] };
-          updatedItem.count = Number(updatedItem.count) - Number(orderItem.quantity);
-          rowData.value[itemIndex] = updatedItem;
-          gridApi.value?.applyTransaction({ update: [updatedItem] });
-        }
+        // const itemIndex = rowData.value.findIndex(i => i.Number === inventoryItem.Number);
+        // if (itemIndex !== -1) {
+        //   const updatedItem = { ...rowData.value[itemIndex] };
+        //   updatedItem.count = Number(updatedItem.count) - Number(orderItem.quantity);
+        //   rowData.value[itemIndex] = updatedItem;
+        //   gridApi.value?.applyTransaction({ update: [updatedItem] });
+        // }
       } catch (itemError) {
         console.error('Ошибка при создании заявки для товара:', orderItem.article, itemError);
         errorCount++;
@@ -488,6 +488,14 @@ const refreshRequestsInList = () => {
     inventoryRequestsListRef.value.refreshRequests()
   }
 }
+
+watch(() => storeTab.value, (newTab) => {
+  if (newTab === 'inventory') {
+    loadInventoryFromDB(); 
+  } else if (newTab === 'alerts') {
+    loadUnreadAlertsCount();
+  }
+});
 </script>
 
 <template>

@@ -1356,26 +1356,35 @@ def update_inventory_request(request_id):
         
         if "status" in data:
             req.status = data["status"]
-            
+
+            item = req.inventory_item
             # При выполнении заявки обновляем количество товара (ПОПОЛНЕНИЕ!)
             if data["status"] == "выполнена" and old_status != "выполнена":
-                item = req.inventory_item
-
+                # item = req.inventory_item
                 if item:
                     # ДОБАВЛЯЕМ количество товара на склад (это пополнение!)
                     item.current_count += req.requested_quantity
                     item.updated_at = datetime.utcnow()
                     
-                    # if not message or not message.strip():
-                    #     raise ValueError("Alert message cannot be empty")
                     # Создаём оповещение о выполнении
-                    alert = models.InventoryAlert(
-                        inventory_request_id=req.id,
-                        alert_type="success",
-                        event_type="request_completed",
-                        message=f"Заявка выполнена: {item.name_rus} ({item.article}) выдано {req.requested_quantity} шт."
-                    )
-                    db.add(alert)
+                    # alert = models.InventoryAlert(
+                    #     inventory_request_id=req.id,
+                    #     alert_type="success",
+                    #     event_type="request_completed",
+                    #     message=f"Заявка {item.status}: {item.name_rus} ({item.article}) выдано {req.requested_quantity} шт."
+                    # )
+                    # db.add(alert)
+            alert = models.InventoryAlert(
+                inventory_request_id=req.id,
+                alert_type="success" if data["status"] == "выполнена" 
+                    else "warning" if data["status"] == "отменена" else "info",
+                event_type="request_completed" if data["status"] == "выполнена" 
+                    else "request_cancelled" if data["status"] == "отменена" 
+                    else "request_in_progress" if data["status"] == "в_процессе" 
+                    else "request_updated",
+                message=f"Заявка {data["status"]}: {item.name_rus} ({item.article})"
+                )
+            db.add(alert)
         
         if "requestedQuantity" in data:
             req.requested_quantity = data["requestedQuantity"]
@@ -1396,7 +1405,7 @@ def update_inventory_request(request_id):
 
 @app.route("/api/inventory-requests/<int:request_id>", methods=["DELETE"])
 def delete_inventory_request(request_id):
-    """Удалить/отменить заявку"""
+    """Удалить заявку"""
     db = SessionLocal()
     try:
         req = db.query(models.InventoryRequest).filter(
