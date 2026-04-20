@@ -1227,6 +1227,100 @@ def check_low_stock():
     finally:
         db.close()
 
+@app.route("/api/reports/check-zip/<int:report_id>", methods=["POST"])
+def check_zip_for_report(report_id):
+    """
+    Проверить ЗИП из used_zip отчета и создать автоматические заявки если недостаточно
+    """
+    db = SessionLocal()
+    try:
+        report = db.query(models.ReportRecord).filter(models.ReportRecord.id == report_id).first()
+        if not report:
+            return jsonify({"error": "Report not found"}), 404
+        
+        if not report.used_zip or not report.used_zip.strip():
+            return jsonify({"message": "No ZIP specified"}), 200
+        
+        # Парсим used_zip по разделителю ;
+        zip_items = [item.strip() for item in report.used_zip.split(';') if item.strip()]
+        created_requests = []
+        
+        for zip_item in zip_items:
+            # Парсим "Артикул:Количество" или просто "Артикул"
+            if ':' in zip_item:
+                item_name, qty_str = zip_item.split(':', 1)
+                quantity_to_order = int(qty_str.strip()) if qty_str.strip().isdigit() else 1
+            else:
+                item_name = zip_item
+                quantity_to_order = 1
+            
+            item_name = item_name.strip()
+            
+            # Ищем товар по артикулу или названию
+            item = db.query(models.InventoryItem).filter(
+                (models.InventoryItem.article == item_name) | 
+                (models.InventoryItem.name_rus == item_name) |
+                (models.InventoryItem.name_eng == item_name)
+            ).first()
+            
+            if not item:
+                # Если товар не найден, пропускаем
+                continue
+            
+            # Рассчитываем доступное количество
+            active_requests = db.query(models.InventoryRequest).filter(
+                models.InventoryRequest.inventory_item_id == item.id,
+                models.InventoryRequest.status.in_(["новая", "в_процессе"])
+            ).all()
+            requested_total = sum(req.requested_quantity for req in active_requests)
+            available_count = item.current_count - requested_total
+            
+            # Если доступное количество <= 0
+            if available_count <= 0:
+                # Проверяем, есть ли уже auto-заявка для этого товара и отчета
+                existing_auto_request = db.query(models.InventoryRequest).filter(
+                    models.InventoryRequest.inventory_item_id == item.id,
+                    models.InventoryRequest.reason == "auto",
+                    models.InventoryRequest.status.in_(["новая", "в_процессе"]),
+                    models.InventoryRequest.related_repair_detail_id == report_id
+                ).first()
+                
+                if not existing_auto_request:
+                    auto_request = models.InventoryRequest(
+                        inventory_item_id=item.id,
+                        requested_quantity=quantity_to_order,
+                        reason="auto",
+                        status="новая",
+                        created_by="system",
+                        related_repair_detail_id=report_id
+                    )
+                    db.add(auto_request)
+                    db.flush()
+                    
+                    # Создаём оповещение
+                    alert = models.InventoryAlert(
+                        inventory_request_id=auto_request.id,
+                        alert_type="warning",
+                        event_type="auto_request_created",
+                        message=f"Автоматическая заявка на ЗИП для ремонта: {item.name_rus} ({item.article}) - {quantity_to_order} шт. (Отчет #{report_id})"
+                    )
+                    db.add(alert)
+                    
+                    created_requests.append({
+                        "requestId": auto_request.id,
+                        "itemId": item.id,
+                        "itemArticle": item.article,
+                        "quantity": quantity_to_order
+                    })
+        
+        db.commit()
+        
+        return jsonify({
+            "createdRequests": created_requests,
+            "message": f"Checked ZIP for report {report_id}"
+        })
+    finally:
+        db.close()
 
 # ========== INVENTORY REQUESTS (ЗАЯВКИ НА ПОПОЛНЕНИЕ) ==========
 
@@ -1367,13 +1461,6 @@ def update_inventory_request(request_id):
                     item.updated_at = datetime.utcnow()
                     
                     # Создаём оповещение о выполнении
-                    # alert = models.InventoryAlert(
-                    #     inventory_request_id=req.id,
-                    #     alert_type="success",
-                    #     event_type="request_completed",
-                    #     message=f"Заявка {item.status}: {item.name_rus} ({item.article}) выдано {req.requested_quantity} шт."
-                    # )
-                    # db.add(alert)
             alert = models.InventoryAlert(
                 inventory_request_id=req.id,
                 alert_type="success" if data["status"] == "выполнена" 

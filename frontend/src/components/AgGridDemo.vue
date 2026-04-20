@@ -5,10 +5,12 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { reportApi } from '../api'
 import { useI18n } from 'vue-i18n'
+import { useInventoryAlerts } from '../composables/useInventoryAlerts'
 
 // Emit for navigation
 const emit = defineEmits(['navigate-to-detail'])
 const { t } = useI18n()
+const { loadAlerts } = useInventoryAlerts()
 
 // ===== РУССКАЯ ЛОКАЛИЗАЦИЯ ФИЛЬТРОВ =====
 const localeRu = computed(()  => ({
@@ -621,6 +623,24 @@ const onCellValueChanged = async (event) => {
     const updateData = { [field]: event.newValue }
     await reportApi.update(recordId, updateData)
     console.log('Сохранено в БД')
+
+    if (field === 'status' && (event.newValue === 'предстоящая' || event.newValue === 'в работе')) {
+      // Проверяем, заполнен ли usedZIP
+      if (event.data.usedZIP && event.data.usedZIP.trim()) {
+        // Не проверяем повторно, если статус меняется с "предстоящая" на "в работе"
+        const shouldCheck = !(event.newValue === 'в работе' && event.oldValue === 'предстоящая')
+        
+        if (shouldCheck) {
+          console.log('Проверяем ЗИП для отчета:', recordId)
+          await reportApi.checkZip(recordId)
+          // Обновляем алерты после создания заявок
+          await loadAlerts()
+        } else {
+          console.log('Пропускаем повторную проверку ЗИП для отчета:', recordId)
+        }
+      }
+    }
+    
   } catch (error) {
     console.error('Ошибка сохранения:', error)
     alert('Ошибка сохранения данных!')
