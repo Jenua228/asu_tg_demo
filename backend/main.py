@@ -1010,7 +1010,7 @@ def inventory_item_to_dict(item):
         ).all()
         
         requested_total = sum(req.requested_quantity for req in active_requests)
-        available_count = item.current_count - requested_total
+        available_count = item.current_count - item.reserved_count - requested_total
         
         return {
             "id": item.id,
@@ -1232,6 +1232,7 @@ def check_zip_for_report(report_id):
     """
     Проверить ЗИП из used_zip отчета и создать автоматические заявки если недостаточно
     """
+    print("bbbbbbbbb")
     db = SessionLocal()
     try:
         report = db.query(models.ReportRecord).filter(models.ReportRecord.id == report_id).first()
@@ -1247,11 +1248,17 @@ def check_zip_for_report(report_id):
         
         for zip_item in zip_items:
             # Парсим "Артикул:Количество" или просто "Артикул"
-            if ':' in zip_item:
-                item_name, qty_str = zip_item.split(':', 1)
-                quantity_to_order = int(qty_str.strip()) if qty_str.strip().isdigit() else 1
+            # if ':' in zip_item:
+                
+            #     item_name, qty_str = zip_item.split(':', 1)
+            #     quantity_to_order = int(qty_str.strip()) if qty_str.strip().isdigit() else 1
+            if ' (шт. - ' in zip_item and zip_item.endswith(')'):
+                item_part = zip_item.rsplit(' (шт. - ', 1)[0]
+                qty_part = zip_item.rsplit(' (шт. - ', 1)[1].rstrip(')')
+                item_name = item_part.strip()
+                quantity_to_order = int(qty_part.strip()) if qty_part.strip().isdigit() else 1
             else:
-                item_name = zip_item
+                item_name = zip_item.strip()
                 quantity_to_order = 1
             
             item_name = item_name.strip()
@@ -1276,8 +1283,17 @@ def check_zip_for_report(report_id):
             available_count = item.current_count - requested_total
             
             # Если доступное количество <= 0
-            if available_count <= 0:
-                # Проверяем, есть ли уже auto-заявка для этого товара и отчета
+            # if available_count <= 0:
+            #     # Проверяем, есть ли уже auto-заявка для этого товара и отчета
+            #     existing_auto_request = db.query(models.InventoryRequest).filter(
+            #         models.InventoryRequest.inventory_item_id == item.id,
+            #         models.InventoryRequest.reason == "auto",
+            #         models.InventoryRequest.status.in_(["новая", "в_процессе"]),
+            #         models.InventoryRequest.related_repair_detail_id == report_id
+            #     ).first()
+            if quantity_to_order > available_count:
+                quantity_to_order -= available_count  
+            # Проверяем, есть ли уже auto-заявка для этого товара и отчета
                 existing_auto_request = db.query(models.InventoryRequest).filter(
                     models.InventoryRequest.inventory_item_id == item.id,
                     models.InventoryRequest.reason == "auto",
@@ -1286,6 +1302,8 @@ def check_zip_for_report(report_id):
                 ).first()
                 
                 if not existing_auto_request:
+                    item.reserved_count += quantity_to_order
+
                     auto_request = models.InventoryRequest(
                         inventory_item_id=item.id,
                         requested_quantity=quantity_to_order,
@@ -1312,6 +1330,8 @@ def check_zip_for_report(report_id):
                         "itemArticle": item.article,
                         "quantity": quantity_to_order
                     })
+                else:
+                    print(f"Auto request already exists for item {item.article} and report {report_id}")
         
         db.commit()
         
@@ -1458,6 +1478,8 @@ def update_inventory_request(request_id):
                 if item:
                     # ДОБАВЛЯЕМ количество товара на склад (это пополнение!)
                     item.current_count += req.requested_quantity
+                    if item.reserved_count >= req.requested_quantity:
+                        item.reserved_count -= req.requested_quantity
                     item.updated_at = datetime.utcnow()
                     
                     # Создаём оповещение о выполнении

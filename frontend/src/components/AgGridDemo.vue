@@ -624,22 +624,33 @@ const onCellValueChanged = async (event) => {
     await reportApi.update(recordId, updateData)
     console.log('Сохранено в БД')
 
-    if (field === 'status' && (event.newValue === 'предстоящая' || event.newValue === 'в работе')) {
+    if (field === 'usedZIP' && (event.data.status === 'предстоящая' || event.data.status === 'в работе')) {
+      console.log('Проверяем ЗИП при изменении usedZIP для отчета:', recordId)
+      await reportApi.checkZip(recordId)
+      console.log('aaaaaaa')
+      await loadAlerts()}
+    else if (field === 'status' && (event.newValue === 'предстоящая' || event.newValue === 'в работе')) {
       // Проверяем, заполнен ли usedZIP
       if (event.data.usedZIP && event.data.usedZIP.trim()) {
         // Не проверяем повторно, если статус меняется с "предстоящая" на "в работе"
-        const shouldCheck = !(event.newValue === 'в работе' && event.oldValue === 'предстоящая')
+        //const shouldCheck = !(event.newValue === 'в работе' && (event.oldValue === 'предстоящая' || event.oldValue === 'не начато'))
         
-        if (shouldCheck) {
-          console.log('Проверяем ЗИП для отчета:', recordId)
+        // if (shouldCheck) {
+        //   console.log('Проверяем ЗИП для отчета:', recordId)
+        //   await reportApi.checkZip(recordId)
+        //   // Обновляем алерты после создания заявок
+        //   await loadAlerts()
+        // } else {
+        //   console.log('Пропускаем повторную проверку ЗИП для отчета:', recordId)
+        // }
+        console.log('Проверяем ЗИП для отчета:', recordId)
           await reportApi.checkZip(recordId)
           // Обновляем алерты после создания заявок
           await loadAlerts()
-        } else {
-          console.log('Пропускаем повторную проверку ЗИП для отчета:', recordId)
-        }
       }
     }
+
+    
     
   } catch (error) {
     console.error('Ошибка сохранения:', error)
@@ -892,6 +903,7 @@ const exportCsv = () => {
             <label>{{ $t('reports.tableColumns.status') }}</label>
             <select v-model="newRow.status">
               <option value="">— {{ $t('reports.select') }} —</option>
+              <option value="не начато">{{ $t('reports.statuses.notStarted') }}</option>
               <option value="предстоящая">{{ $t('reports.statuses.upcoming') }}</option>
               <option value="в работе">{{ $t('reports.statuses.inProgress') }}</option>
               <option value="выполнено">{{ $t('reports.statuses.completed') }}</option>

@@ -99,6 +99,19 @@ const columnDefs = computed(() => [
     }
   },
   { 
+    headerName: t('store.columns.available'), 
+    field: "availableCount", 
+    editable: false,
+    cellClass: 'grid-cell-centered', 
+    type: 'numericColumn',
+    valueGetter: (params) => {
+      const current = Number(params.data.count) || 0;
+      const reserved = Number(params.data.reservedCount) || 0;
+      const requested = 0; // Если нужно учитывать активные заявки, рассчитать
+      return current - reserved - requested;
+    }
+  },
+  { 
     headerName: t('store.columns.minStock'), 
     field: "min_sctock",
     cellClass: 'grid-cell-centered',
@@ -252,6 +265,7 @@ const loadInventoryFromDB = async () => {
       count: item.currentCount,   
       min_sctock: item.minStock,  
       name_storage: item.storageName, 
+      reservedCount: item.reservedCount || 0,
       comment: item.comment || '',
       imgName: item.imgName || '',
       pdfUrl: item.pdfUrl || '',
