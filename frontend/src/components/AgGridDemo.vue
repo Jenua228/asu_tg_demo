@@ -627,26 +627,19 @@ const onCellValueChanged = async (event) => {
     if (field === 'usedZIP' && (event.data.status === 'предстоящая' || event.data.status === 'в работе')) {
       console.log('Проверяем ЗИП при изменении usedZIP для отчета:', recordId)
       await reportApi.checkZip(recordId)
-      console.log('aaaaaaa')
       await loadAlerts()}
-    else if (field === 'status' && (event.newValue === 'предстоящая' || event.newValue === 'в работе')) {
-      // Проверяем, заполнен ли usedZIP
-      if (event.data.usedZIP && event.data.usedZIP.trim()) {
-        // Не проверяем повторно, если статус меняется с "предстоящая" на "в работе"
-        //const shouldCheck = !(event.newValue === 'в работе' && (event.oldValue === 'предстоящая' || event.oldValue === 'не начато'))
-        
-        // if (shouldCheck) {
-        //   console.log('Проверяем ЗИП для отчета:', recordId)
-        //   await reportApi.checkZip(recordId)
-        //   // Обновляем алерты после создания заявок
-        //   await loadAlerts()
-        // } else {
-        //   console.log('Пропускаем повторную проверку ЗИП для отчета:', recordId)
-        // }
-        console.log('Проверяем ЗИП для отчета:', recordId)
-          await reportApi.checkZip(recordId)
-          // Обновляем алерты после создания заявок
-          await loadAlerts()
+    else if (field === 'status') {
+      const activeStatuses = ['предстоящая', 'в работе']
+      const wasActive = activeStatuses.includes(event.oldValue)
+      const isActive = activeStatuses.includes(event.newValue)
+  
+      if (wasActive && !isActive && event.data.usedZIP && event.data.usedZIP.trim()) {
+        // Снимаем резерв при деактивации
+        await reportApi.releaseZip(recordId)
+      } else if (!wasActive && isActive && event.data.usedZIP && event.data.usedZIP.trim()) {
+        // Резервируем при активации
+        await reportApi.checkZip(recordId)
+        await loadAlerts()
       }
     }
 

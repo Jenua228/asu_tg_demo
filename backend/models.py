@@ -190,7 +190,6 @@ class InventoryItem(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Связи
     inventory_requests = relationship("InventoryRequest", back_populates="inventory_item", cascade="all, delete-orphan")
 
 
@@ -200,35 +199,19 @@ class InventoryRequest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     inventory_item_id = Column(Integer, ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
-    
     requested_quantity = Column(Integer, nullable=False)  # Запрашиваемое количество
-    
-    # Тип заявки: manual (по кнопке) | auto (автоматическая по минимальному запасу)
-    reason = Column(String(50), default="manual")
-    
-    # Статус заявки
-    status = Column(String(50), default="новая")  # новая|в_процессе|выполнена|отменена
-    
-    # Связь с этапом ремонта (может быть заявка и без привязки к ремонту)
+    reason = Column(String(50), default="manual")#manual (по кнопке) | auto (автоматическая по минимальному запасу)
+    status = Column(String(50), default="новая")  # новая|в_процессе|выполнена|отменен
     related_repair_detail_id = Column(Integer, ForeignKey("repair_details.id", ondelete="SET NULL"), nullable=True)
-    
-    # Связь с записью отчета (из какого ремонта идет заявка)
     related_report_id = Column(Integer, ForeignKey("report_records.id", ondelete="SET NULL"), nullable=True)
-    
-    # Кто создал заявку
     created_by = Column(String(200), nullable=True)
-    
-    # Была ли отправлена уведомление на информационную панель
     notification_sent = Column(Boolean, default=False)
-    
-    # Дополнительные даты
     planned_delivery_date = Column(String(50), nullable=True)  # Планируемая дата доставки
     actual_delivery_date = Column(String(50), nullable=True)  # Фактическая дата выдачи со склада
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Связи
     inventory_item = relationship("InventoryItem", back_populates="inventory_requests")
     alerts = relationship("InventoryAlert", back_populates="request", cascade="all, delete-orphan")
 
@@ -238,22 +221,12 @@ class InventoryAlert(Base):
     __tablename__ = "inventory_alerts"
 
     id = Column(Integer, primary_key=True, index=True)
-    
     inventory_request_id = Column(Integer, ForeignKey("inventory_requests.id", ondelete="CASCADE"), nullable=True)
-    
-    # Тип уведомления: info|warning|critical|success
     alert_type = Column(String(50), default="info")
-    
-    # Тип события: new_request|low_stock|request_completed|auto_request_created
     event_type = Column(String(100), nullable=False)
-    
-    # Сообщение
     message = Column(Text, nullable=False)
-    
-    # Статус прочтения
     is_read = Column(Boolean, default=False)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Связь с заявкой
     request = relationship("InventoryRequest", back_populates="alerts")

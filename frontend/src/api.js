@@ -47,7 +47,8 @@ export const reportApi = {
   update: (id, record) => api.put(`/reports/${id}`, record),
   delete: (id) => api.delete(`/reports/${id}`),
   reset: () => api.post('/reports/reset'),
-  checkZip: (reportId) => api.post(`/reports/check-zip/${reportId}`)
+  checkZip: (reportId) => api.post(`/reports/check-zip/${reportId}`),
+  releaseZip: (reportId) => api.post(`/reports/release-zip/${reportId}`)
 }
 
 // ==================== GANTT (READ-ONLY) ====================

@@ -446,6 +446,33 @@ def update_report(record_id):
             db_record.work_type = data["workType"]
         if "laborCost" in data:
             db_record.labor_cost = data["laborCost"]
+
+        # Снять старое резервирование, если статус активный и usedZIP изменилось
+        if "usedZIP" in data and data["usedZIP"] != db_record.used_zip:
+            if db_record.status in ['предстоящая', 'в работе'] and db_record.used_zip and db_record.used_zip.strip():
+                old_zip_items = [item.strip() for item in db_record.used_zip.split(';') if item.strip()]
+                for old_zip_item in old_zip_items:
+                    # Парсинг old_quantity аналогично парсингу нового used_zip (из check_zip_for_report)
+                    if ' (шт. - ' in old_zip_item and old_zip_item.endswith(')'):
+                        item_part = old_zip_item.rsplit(' (шт. - ', 1)[0]
+                        qty_part = old_zip_item.rsplit(' (шт. - ', 1)[1].rstrip(')')
+                        old_item_name = item_part.strip()
+                        old_quantity = int(qty_part.strip()) if qty_part.strip().isdigit() else 1
+                    else:
+                        old_item_name = old_zip_item.strip()
+                        old_quantity = 1
+            
+                    # Найти товар по имени (аналогично check_zip_for_report)
+                    old_item = db.query(models.InventoryItem).filter(
+                        (models.InventoryItem.article == old_item_name) | 
+                        (models.InventoryItem.name_rus == old_item_name) |
+                        (models.InventoryItem.name_eng == old_item_name)
+                    ).first()
+            
+                    # Снять резерв (уменьшить reserved_count)
+                    if old_item and old_item.reserved_count >= old_quantity:
+                        old_item.reserved_count -= old_quantity
+
         if "usedZIP" in data:
             db_record.used_zip = data["usedZIP"]
         if "endRepairDate" in data:
@@ -469,6 +496,33 @@ def update_report(record_id):
         if "plannedEndDate" in data:
             db_record.planned_end_date = data["plannedEndDate"]
         
+
+        # Снимаем резерв при завершении ремонта (статус "выполнено")
+        if "status" in data and data["status"] == "выполнено" and db_record.status != "выполнено":
+            if db_record.used_zip and db_record.used_zip.strip():
+                zip_items = [item.strip() for item in db_record.used_zip.split(';') if item.strip()]
+                for zip_item in zip_items:
+                    if ' (шт. - ' in zip_item and zip_item.endswith(')'):
+                        item_part = zip_item.rsplit(' (шт. - ', 1)[0]
+                        qty_part = zip_item.rsplit(' (шт. - ', 1)[1].rstrip(')')
+                        item_name = item_part.strip()
+                        quantity_to_release = int(qty_part.strip()) if qty_part.strip().isdigit() else 1
+                    else:
+                        item_name = zip_item.strip()
+                        quantity_to_release = 1
+            
+                    item_name = item_name.strip()
+            
+                    item = db.query(models.InventoryItem).filter(
+                        (models.InventoryItem.article == item_name) | 
+                        (models.InventoryItem.name_rus == item_name) |
+                        (models.InventoryItem.name_eng == item_name)
+                    ).first()
+            
+                    if item and item.reserved_count >= quantity_to_release:
+                        item.reserved_count -= quantity_to_release
+
+
         db_record.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(db_record)
@@ -1019,8 +1073,9 @@ def inventory_item_to_dict(item):
             "nameEng": item.name_eng,
             "currentCount": item.current_count,
             "minStock": item.min_stock,
-            "availableCount": available_count,  # Доступное количество с учетом активных заявок
+            "availableCount": available_count,  
             "storageName": item.storage_name,
+            "reservedCount": item.reserved_count,
             "comment": item.comment,
             "pdfUrl": item.pdf_url,
             "imgName": item.image_Name,
@@ -1232,7 +1287,6 @@ def check_zip_for_report(report_id):
     """
     Проверить ЗИП из used_zip отчета и создать автоматические заявки если недостаточно
     """
-    print("bbbbbbbbb")
     db = SessionLocal()
     try:
         report = db.query(models.ReportRecord).filter(models.ReportRecord.id == report_id).first()
@@ -1247,11 +1301,6 @@ def check_zip_for_report(report_id):
         created_requests = []
         
         for zip_item in zip_items:
-            # Парсим "Артикул:Количество" или просто "Артикул"
-            # if ':' in zip_item:
-                
-            #     item_name, qty_str = zip_item.split(':', 1)
-            #     quantity_to_order = int(qty_str.strip()) if qty_str.strip().isdigit() else 1
             if ' (шт. - ' in zip_item and zip_item.endswith(')'):
                 item_part = zip_item.rsplit(' (шт. - ', 1)[0]
                 qty_part = zip_item.rsplit(' (шт. - ', 1)[1].rstrip(')')
@@ -1280,19 +1329,12 @@ def check_zip_for_report(report_id):
                 models.InventoryRequest.status.in_(["новая", "в_процессе"])
             ).all()
             requested_total = sum(req.requested_quantity for req in active_requests)
-            available_count = item.current_count - requested_total
-            
-            # Если доступное количество <= 0
-            # if available_count <= 0:
-            #     # Проверяем, есть ли уже auto-заявка для этого товара и отчета
-            #     existing_auto_request = db.query(models.InventoryRequest).filter(
-            #         models.InventoryRequest.inventory_item_id == item.id,
-            #         models.InventoryRequest.reason == "auto",
-            #         models.InventoryRequest.status.in_(["новая", "в_процессе"]),
-            #         models.InventoryRequest.related_repair_detail_id == report_id
-            #     ).first()
-            if quantity_to_order > available_count:
-                quantity_to_order -= available_count  
+            available_count = item.current_count - item.reserved_count - requested_total
+    
+            item.reserved_count += quantity_to_order 
+            # Если доступное недостаточно, создаём заявку на разницу
+            shortage = quantity_to_order - available_count
+            if shortage > 0:
             # Проверяем, есть ли уже auto-заявка для этого товара и отчета
                 existing_auto_request = db.query(models.InventoryRequest).filter(
                     models.InventoryRequest.inventory_item_id == item.id,
@@ -1302,15 +1344,15 @@ def check_zip_for_report(report_id):
                 ).first()
                 
                 if not existing_auto_request:
-                    item.reserved_count += quantity_to_order
+                    # item.reserved_count -= quantity_to_order
 
                     auto_request = models.InventoryRequest(
                         inventory_item_id=item.id,
-                        requested_quantity=quantity_to_order,
+                        requested_quantity=shortage,
                         reason="auto",
                         status="новая",
                         created_by="system",
-                        related_repair_detail_id=report_id
+                        related_report_id=report_id
                     )
                     db.add(auto_request)
                     db.flush()
@@ -1320,7 +1362,7 @@ def check_zip_for_report(report_id):
                         inventory_request_id=auto_request.id,
                         alert_type="warning",
                         event_type="auto_request_created",
-                        message=f"Автоматическая заявка на ЗИП для ремонта: {item.name_rus} ({item.article}) - {quantity_to_order} шт. (Отчет #{report_id})"
+                        message=f"Автоматическая заявка на ЗИП для ремонта: {item.name_rus} ({item.article}) - {shortage} шт. (Отчет #{report_id})"
                     )
                     db.add(alert)
                     
@@ -1328,7 +1370,7 @@ def check_zip_for_report(report_id):
                         "requestId": auto_request.id,
                         "itemId": item.id,
                         "itemArticle": item.article,
-                        "quantity": quantity_to_order
+                        "quantity": shortage
                     })
                 else:
                     print(f"Auto request already exists for item {item.article} and report {report_id}")
@@ -1339,6 +1381,50 @@ def check_zip_for_report(report_id):
             "createdRequests": created_requests,
             "message": f"Checked ZIP for report {report_id}"
         })
+    finally:
+        db.close()
+
+
+@app.route("/api/reports/release-zip/<int:report_id>", methods=["POST"])
+def release_zip_for_report(report_id):
+    """
+    Снять резерв ЗИП для отчета при деактивации статуса
+    """
+    db = SessionLocal()
+    try:
+        report = db.query(models.ReportRecord).filter(models.ReportRecord.id == report_id).first()
+        if not report:
+            return jsonify({"error": "Report not found"}), 404
+        
+        if not report.used_zip or not report.used_zip.strip():
+            return jsonify({"message": "No ZIP specified"}), 200
+        
+        # Парсим used_zip
+        zip_items = [item.strip() for item in report.used_zip.split(';') if item.strip()]
+        
+        for zip_item in zip_items:
+            if ' (шт. - ' in zip_item and zip_item.endswith(')'):
+                item_part = zip_item.rsplit(' (шт. - ', 1)[0]
+                qty_part = zip_item.rsplit(' (шт. - ', 1)[1].rstrip(')')
+                item_name = item_part.strip()
+                quantity_to_release = int(qty_part.strip()) if qty_part.strip().isdigit() else 1
+            else:
+                item_name = zip_item.strip()
+                quantity_to_release = 1
+            
+            item_name = item_name.strip()
+            
+            item = db.query(models.InventoryItem).filter(
+                (models.InventoryItem.article == item_name) | 
+                (models.InventoryItem.name_rus == item_name) |
+                (models.InventoryItem.name_eng == item_name)
+            ).first()
+            
+            if item and item.reserved_count >= quantity_to_release:
+                item.reserved_count -= quantity_to_release
+        
+        db.commit()
+        return jsonify({"message": f"Released ZIP for report {report_id}"})
     finally:
         db.close()
 
@@ -1474,12 +1560,15 @@ def update_inventory_request(request_id):
             item = req.inventory_item
             # При выполнении заявки обновляем количество товара (ПОПОЛНЕНИЕ!)
             if data["status"] == "выполнена" and old_status != "выполнена":
-                # item = req.inventory_item
                 if item:
                     # ДОБАВЛЯЕМ количество товара на склад (это пополнение!)
                     item.current_count += req.requested_quantity
-                    if item.reserved_count >= req.requested_quantity:
-                        item.reserved_count -= req.requested_quantity
+                    # if item.reserved_count >= req.requested_quantity:
+                        # ???????????? может быть неправильно, потому что 
+                        # в requested_quantity вычитается то, что уже лежало на складе
+                        # item.reserved_count += req.requested_quantity
+                    if req.reason == "auto" and req.related_report_id:
+                        item.reserved_count += req.requested_quantity
                     item.updated_at = datetime.utcnow()
                     
                     # Создаём оповещение о выполнении

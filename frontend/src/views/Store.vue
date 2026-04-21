@@ -226,6 +226,8 @@ const onCellValueChanged = async (event) => {
       nameRus: updatedItem.num_rus,
       nameEng: updatedItem.num_eng,
       currentCount: Number(updatedItem.count),
+      // availableCount: item.availableCount,  
+      // reservedCount: item.reservedCount,
       minStock: Number(updatedItem.min_sctock),
       storageName: updatedItem.name_storage,
       comment: updatedItem.comment || '',
@@ -239,6 +241,7 @@ const onCellValueChanged = async (event) => {
     // Отправляем PUT запрос
     await inventoryApi.update(dbId, apiPayload);
     console.log('✅ Товар обновлён в БД');
+    await loadInventoryFromDB()
 
     await inventoryApi.checkLowStock()
     await loadAlerts()
@@ -265,6 +268,7 @@ const loadInventoryFromDB = async () => {
       count: item.currentCount,   
       min_sctock: item.minStock,  
       name_storage: item.storageName, 
+      // availableCount: item.availableCount,
       reservedCount: item.reservedCount || 0,
       comment: item.comment || '',
       imgName: item.imgName || '',
@@ -393,8 +397,6 @@ const handleOrderSubmit = async (orderData) => {
     
     // Выводим результат
     if (successCount > 0 && errorCount === 0) {
-      // alert(`✅ ${successCount} заявка(и) успешно созданы!`);
-      //toast.access('Создана новая заявка')
       await inventoryApi.checkLowStock()
       await loadAlerts()
     } else if (successCount > 0) {
