@@ -1331,9 +1331,11 @@ def check_zip_for_report(report_id):
             requested_total = sum(req.requested_quantity for req in active_requests)
             available_count = item.current_count - item.reserved_count - requested_total
     
-            item.reserved_count += quantity_to_order 
+                                    # item.reserved_count += quantity_to_order 
+            to_reserve = min(quantity_to_order, available_count)
+            item.reserved_count += to_reserve
             # Если доступное недостаточно, создаём заявку на разницу
-            shortage = quantity_to_order - available_count
+            shortage = quantity_to_order - to_reserve
             if shortage > 0:
             # Проверяем, есть ли уже auto-заявка для этого товара и отчета
                 existing_auto_request = db.query(models.InventoryRequest).filter(

@@ -104,6 +104,7 @@ const getStatusColor = (status) => {
     case 'в работе': return '#f59e0b'        // оранжевый
     case 'просрочено': return '#ef4444'      // красный
     case 'предстоящая': return '#9ca3af'     // серый
+    case 'не начато': return '#9ca3af'      // серый
     default: return '#9ca3af'
   }
 }
@@ -146,7 +147,7 @@ const baseColumnDefs = [
   { field: 'plannedStartDate', headerName: t('reports.tableColumns.plannedStartDate'), editable: (params) => params.data?.id === editingRowId.value, filter: 'agTextColumnFilter', width: 100 },
   { field: 'beginRepairDate', headerName: t('reports.tableColumns.beginRepairDate'), editable: (params) => params.data?.id === editingRowId.value, filter: 'agTextColumnFilter', width: 100 },
   { field: 'status', headerName: t('reports.tableColumns.status'), editable: (params) => params.data?.id === editingRowId.value, filter: 'agTextColumnFilter', width: 120, cellEditor: 'agSelectCellEditor', cellEditorParams: {
-    values: ['предстоящая', 'в работе', 'выполнено', 'просрочено']
+    values: ['не начато','предстоящая', 'в работе', 'выполнено', 'просрочено']
   }, cellRenderer: (params) => {
     if (!params.value || params.data?.isSectionHeader) return params.value || ''
     const color = getStatusColor(params.value)
