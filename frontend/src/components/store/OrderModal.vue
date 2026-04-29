@@ -51,6 +51,39 @@ const newItem = ref({
   unit: t('orderModal.pcs')
 })
 
+watch(() => newItem.value.product, (newProduct) => {
+  if (!newProduct) {
+    newItem.value.unit = t('orderModal.pcs') 
+    return
+  }
+  
+  // Найти выбранный товар в inventory
+  const selectedProduct = props.inventory.find(item => 
+    item.Article === newProduct || 
+    item.Number === parseInt(newProduct) 
+  )
+  
+  if (selectedProduct) {
+    console.log('ooooo:', newProduct)
+    const rawUnit = selectedProduct.unitMeasurement || selectedProduct.unit || ''
+    newItem.value.unit = normalizeUnit(rawUnit)
+  } else {
+    newItem.value.unit = 'pcs'
+  }
+})
+
+function normalizeUnit(unit) {
+  if (!unit) return 'pcs'
+  const lower = unit.toLowerCase()
+  if (lower === 'шт' || lower === 'штука' || lower === 'pcs' || lower === 'pc') return 'pcs'
+  if (lower === 'кг' || lower === 'kg') return 'kg'
+  if (lower === 'м' || lower === 'm') return 'm'
+  if (lower === 'л' || lower === 'l') return 'l'
+  if (lower === 'упаковка' || lower === 'pack') return 'pack'
+  if (lower === 'комплект' || lower === 'set') return 'set'
+  return 'pcs'
+}
+
 function generateRequestNumber() {
   const date = new Date()
   const year = date.getFullYear().toString().slice(-2)
@@ -110,9 +143,6 @@ function addItem() {
                    selectedProduct.product_name || 
                    t('orderModal.notSpecifiedt')
   }
-
-    
-
   
   const article = selectedProduct.Article || 
                   selectedProduct.article || 
@@ -152,6 +182,8 @@ function validateQuantity(item) {
   }
 }
 
+
+
 function getStock(product) {
   if (!product) return 0;
   
@@ -187,6 +219,7 @@ function handleKeydown(event, item) {
     editingField.value = ''
   }
 }
+
 
 function updatePartType(index) {
   partTypes.value[index].checked = !partTypes.value[index].checked
@@ -642,6 +675,7 @@ watch(() => props.modelValue, (isOpen) => {
     order.value.requestNumber = generateRequestNumber()
   }
 })
+
 </script>
 
 <template>

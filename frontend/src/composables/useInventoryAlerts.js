@@ -35,12 +35,6 @@ export function useInventoryAlerts() {
         })
         alertsStore.isFirstLoad = false
       } else {
-        // Нет toast notifications - просто добавляем в lastAlertIds
-        // for (const alert of newAlerts) {
-        //   if (!alert.isRead && !alertsStore.lastAlertIds.has(alert.id)) {
-        //     alertsStore.lastAlertIds.add(alert.id)
-        //   }
-        // }
          // Показываем toast для новых непрочитанных алертов
           for (const alert of newAlerts) {
         // Если алерт новый и непрочитанный – показываем уведомление
@@ -48,9 +42,6 @@ export function useInventoryAlerts() {
               const toastType = getToastType(alert.alertType)
               //if (toast[toastType]) {
                 toast[toastType](alert.message)
-              //} //else {
-                //toast.info(alert.message)
-              //}
               alertsStore.lastAlertIds.add(alert.id)
             }
       }}
@@ -129,7 +120,6 @@ export function useInventoryAlerts() {
       alertsStore.updateInterval = null
     }
   }
-
 
   return {
     // State

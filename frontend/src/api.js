@@ -73,7 +73,7 @@ export const repairDetailApi = {
   // Обновить этап
   update: (detailId, data) => api.put(`/repair-details/item/${detailId}`, data),
   
-  // Удалить этап
+  // Удалить этап 
   delete: (detailId) => api.delete(`/repair-details/item/${detailId}`),
   create: (reportId, data) => api.post(`/repair-details/${reportId}`, data)
 }

@@ -847,6 +847,9 @@
   },
 
   "inventory": {
+    "id": "Номер",
+    "reason": "Тип",
+    "status": "Статус",
     "warehouseTitle": "Управление складом ЗИП",
     "alertsTitle": "Оповещения по запасам",
     "requestsTitle": "Заявки на пополнение",
@@ -923,5 +926,6 @@
     "filterByStatus": "Фильтр по статусу",
     "alertOn": "Оповещение получено",
     "requestFrom": "Заявка от",
-    "markAsRead": "Отметить как прочитанное"
+    "markAsRead": "Отметить как прочитанное",
+    "completedRequests": "Завершенные / Отмененные заявки"
 }}

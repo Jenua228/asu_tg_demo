@@ -315,11 +315,11 @@ const handleAddItem = async (item) => {
     const gridItem = {
       Number: createdItem.id.toString(),
       Article: createdItem.article,
-      num_rus: createdItem.nameRus,  // ← Исправил: nameRus → num_rus
-      num_eng: createdItem.nameEng,  // ← Исправил: nameEng → num_eng
-      count: createdItem.currentCount,  // ← Исправил: currentCount → count
-      min_sctock: createdItem.minStock,  // ← Исправил: minStock → min_sctock
-      name_storage: createdItem.storageName,  // ← Исправил: storageName → name_storage
+      num_rus: createdItem.nameRus,  
+      num_eng: createdItem.nameEng,  
+      count: createdItem.currentCount,  
+      min_sctock: createdItem.minStock,  
+      name_storage: createdItem.storageName,  
       comment: createdItem.comment || '',
       imgName: createdItem.imgName || '',
       pdfUrl: createdItem.pdfUrl || '',
@@ -378,14 +378,6 @@ const handleOrderSubmit = async (orderData) => {
         console.log('✅ Заявка создана в БД:', response.data);
         successCount++;
         
-        // Уменьшаем запас в локальном массиве
-        // const itemIndex = rowData.value.findIndex(i => i.Number === inventoryItem.Number);
-        // if (itemIndex !== -1) {
-        //   const updatedItem = { ...rowData.value[itemIndex] };
-        //   updatedItem.count = Number(updatedItem.count) - Number(orderItem.quantity);
-        //   rowData.value[itemIndex] = updatedItem;
-        //   gridApi.value?.applyTransaction({ update: [updatedItem] });
-        // }
       } catch (itemError) {
         console.error('Ошибка при создании заявки для товара:', orderItem.article, itemError);
         errorCount++;
@@ -397,7 +389,6 @@ const handleOrderSubmit = async (orderData) => {
     
     // Выводим результат
     if (successCount > 0 && errorCount === 0) {
-      await inventoryApi.checkLowStock()
       await loadAlerts()
     } else if (successCount > 0) {
       alert(`⚠️ Создано ${successCount} заявок(и), ошибок: ${errorCount}`);

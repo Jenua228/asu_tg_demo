@@ -193,6 +193,29 @@ class InventoryItem(Base):
     inventory_requests = relationship("InventoryRequest", back_populates="inventory_item", cascade="all, delete-orphan")
 
 
+# class Nomenclature(Base):
+#     __tablename__ = 'nomenclature'
+#     __table_args__ = (
+#         CheckConstraint("criticality IN ('A', 'B', 'C')", name="ck_criticality"),
+#         CheckConstraint("min_stock >= 0", name="ck_min_stock_positive"),
+#         CheckConstraint("max_stock >= min_stock", name="ck_max_ge_min"),
+#         CheckConstraint("delivery_days BETWEEN 1 AND 365", name="ck_delivery_days_range"),
+#     )
+
+#     id = Column(Integer, primary_key=True, autoincrement=True)
+#     name = Column(String(255), nullable=False)
+#     article = Column(String(100), index=True)
+#     supplier_id = Column(
+#         Integer, 
+#         ForeignKey('supplier.id', ondelete='CASCADE'), 
+#         index=True)
+#     unit = Column(String(50))
+#     criticality = Column(Char(1))
+#     min_stock = Column(Numeric(12, 3), nullable=False, default=0)
+#     max_stock = Column(Numeric(12, 3), nullable=False, default=0)
+#     delivery_days = Column(Integer)
+#     expiry_date = Column(Date)
+
 class InventoryRequest(Base):
     """Заявка на пополнение запасов ЗИП"""
     __tablename__ = "inventory_requests"

@@ -449,6 +449,7 @@ def update_report(record_id):
 
         # Снять старое резервирование, если статус активный и usedZIP изменилось
         if "usedZIP" in data and data["usedZIP"] != db_record.used_zip:
+            print(f"DEBUG: usedZIP changed, old: '{db_record.used_zip}', new: '{data.get('usedZIP')}', status: '{db_record.status}', old_zip_valid: {bool(db_record.used_zip and db_record.used_zip.strip())}")
             if db_record.status in ['предстоящая', 'в работе'] and db_record.used_zip and db_record.used_zip.strip():
                 old_zip_items = [item.strip() for item in db_record.used_zip.split(';') if item.strip()]
                 for old_zip_item in old_zip_items:
@@ -471,6 +472,7 @@ def update_report(record_id):
             
                     # Снять резерв (уменьшить reserved_count)
                     if old_item and old_item.reserved_count >= old_quantity:
+
                         old_item.reserved_count -= old_quantity
 
         if "usedZIP" in data:
@@ -1064,8 +1066,9 @@ def inventory_item_to_dict(item):
         ).all()
         
         requested_total = sum(req.requested_quantity for req in active_requests)
-        available_count = item.current_count - item.reserved_count - requested_total
-        
+        # available_count = item.current_count - item.reserved_count - requested_total
+        available_count = max(0, item.current_count - item.reserved_count - requested_total)
+
         return {
             "id": item.id,
             "article": item.article,
@@ -1225,7 +1228,7 @@ def check_low_stock():
             available_count = item.current_count - requested_total
             
             # Если доступное количество ниже минимума
-            if available_count < item.min_stock:
+            if available_count < item.min_stock and item.current_count < item.min_stock:
                 low_stock_items.append({
                     "id": item.id,
                     "article": item.article,
@@ -1328,55 +1331,44 @@ def check_zip_for_report(report_id):
                 models.InventoryRequest.inventory_item_id == item.id,
                 models.InventoryRequest.status.in_(["новая", "в_процессе"])
             ).all()
-            requested_total = sum(req.requested_quantity for req in active_requests)
+            # Исключаем auto-заявки для этого отчета, чтобы не учитывать свои старые заявки дважды
+            requested_total = sum(req.requested_quantity for req in active_requests 
+                if not (req.reason == "auto" and req.related_report_id == report_id))
             available_count = item.current_count - item.reserved_count - requested_total
-    
-                                    # item.reserved_count += quantity_to_order 
+
             to_reserve = min(quantity_to_order, available_count)
             item.reserved_count += to_reserve
+
             # Если доступное недостаточно, создаём заявку на разницу
             shortage = quantity_to_order - to_reserve
-            if shortage > 0:
-            # Проверяем, есть ли уже auto-заявка для этого товара и отчета
-                existing_auto_request = db.query(models.InventoryRequest).filter(
-                    models.InventoryRequest.inventory_item_id == item.id,
-                    models.InventoryRequest.reason == "auto",
-                    models.InventoryRequest.status.in_(["новая", "в_процессе"]),
-                    models.InventoryRequest.related_repair_detail_id == report_id
-                ).first()
-                
-                if not existing_auto_request:
-                    # item.reserved_count -= quantity_to_order
 
-                    auto_request = models.InventoryRequest(
-                        inventory_item_id=item.id,
-                        requested_quantity=shortage,
-                        reason="auto",
-                        status="новая",
-                        created_by="system",
-                        related_report_id=report_id
-                    )
-                    db.add(auto_request)
-                    db.flush()
+            if shortage > 0:                
+                auto_request = models.InventoryRequest(
+                    inventory_item_id=item.id,
+                    requested_quantity=shortage,
+                    reason="auto",
+                    status="новая",
+                    created_by="system",
+                    related_report_id=report_id
+                )
+                db.add(auto_request)
+                db.flush()
                     
-                    # Создаём оповещение
-                    alert = models.InventoryAlert(
-                        inventory_request_id=auto_request.id,
-                        alert_type="warning",
-                        event_type="auto_request_created",
-                        message=f"Автоматическая заявка на ЗИП для ремонта: {item.name_rus} ({item.article}) - {shortage} шт. (Отчет #{report_id})"
-                    )
-                    db.add(alert)
+                # Создаём оповещение
+                alert = models.InventoryAlert(
+                    inventory_request_id=auto_request.id,
+                    alert_type="warning",
+                    event_type="auto_request_created",
+                    message=f"Автоматическая заявка на ЗИП для ремонта: {item.name_rus} ({item.article}) - {shortage} шт. (Отчет #{report_id})"
+                )
+                db.add(alert)
                     
-                    created_requests.append({
-                        "requestId": auto_request.id,
-                        "itemId": item.id,
-                        "itemArticle": item.article,
-                        "quantity": shortage
-                    })
-                else:
-                    print(f"Auto request already exists for item {item.article} and report {report_id}")
-        
+                created_requests.append({
+                    "requestId": auto_request.id,
+                    "itemId": item.id,
+                    "itemArticle": item.article,
+                    "quantity": shortage
+                })
         db.commit()
         
         return jsonify({

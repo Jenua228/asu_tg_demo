@@ -27,15 +27,15 @@
         </button>
 
         <!-- Кнопка возврата на вкладку товаров -->
-        <button @click="goBackToInventory" class="btn-back">
+        <!-- <button @click="goBackToInventory" class="btn-back">
           ← {{ $t('common.back') }}
-        </button>
+        </button> -->
       </div>
     </div>
     
     <!-- РАЗДЕЛ 1: АКТУАЛЬНЫЕ ЗАЯВКИ -->
     <div class="section-active-requests">
-      <h3 class="section-title">✓ Актуальные заявки ({{ activeRequests.length }})</h3>
+      <h3 class="section-title">{{ $t('inventory.activeRequests') }} ({{ activeRequests.length }})</h3>
       
       <div class="requests-table-container" v-if="activeRequests.length > 0">
         <table class="requests-table">
@@ -71,7 +71,7 @@
               </td>
               <td>
                 <span :class="`badge-${req.reason}`">
-                  {{ req.reason === 'manual' ? $t('inventory.reasonManual') : $t('inventory.reasonAuto') }}
+                  {{ req.reason === 'manual' ? 'Ручная' : 'Автоматическая' }}
                 </span>
               </td>
               <td>
@@ -80,11 +80,11 @@
                   @change="updateRequestStatus(req.id, $event.target.value)"
                   class="status-select"
                 >
-                  <option value="новая">{{ $t('inventory.statusNew') }}</option>
-                  <option value="одобрена">✓ Одобрена</option>
-                  <option value="в_процессе">{{ $t('inventory.statusInProcess') }}</option>
-                  <option value="выполнена">{{ $t('inventory.statusCompleted') }}</option>
-                  <option value="отменена">{{ $t('inventory.statusCancelled') }}</option>
+                  <option value="новая">Новая</option>
+                  <option value="одобрена">Одобрена</option>
+                  <option value="в_процессе">В процессе</option>
+                  <option value="выполнена">Выполнена</option>
+                  <option value="отменена">Отменена</option>
                 </select>
               </td>
               <td class="date-cell">{{ formatDate(req.createdAt) }}</td>
@@ -124,7 +124,7 @@
 
     <!-- РАЗДЕЛ 2: ВЫПОЛНЕННЫЕ И ОТМЕНЁННЫЕ ЗАЯВКИ -->
     <div class="section-completed-requests">
-      <h3 class="section-title">Выполненные / Отменённые заявки ({{ completedRequests.length }})</h3>
+      <h3 class="section-title">{{ $t('inventory.completedRequests') }} ({{ completedRequests.length }})</h3>
       
       <div class="requests-table-container" v-if="completedRequests.length > 0">
         <table class="requests-table">
@@ -152,7 +152,7 @@
               <td class="quantity-cell">{{ req.requestedQuantity }}</td>
               <td>
                 <span :class="`badge-${req.reason}`">
-                  {{ req.reason === 'manual' ? $t('inventory.reasonManual') : $t('inventory.reasonAuto') }}
+                  {{ req.reason === 'manual' ? 'Ручная' : 'Автоматическая' }}
                 </span>
               </td>
               <td>
@@ -170,7 +170,7 @@
                   👁️
                 </button>
                 <button 
-                  v-if="req.status === 'отменена'"
+                  v-if="req.status === 'отменена' || req.status === 'выполнена'"
                   @click="updateRequestStatus(req.id, 'новая')"
                   class="btn-restore"
                   title="Вернуть заявку в статус 'Новая'"
@@ -371,7 +371,9 @@ const updateDeliveryDate = async () => {
     await inventoryRequestApi.update(selectedRequest.value.id, {
       plannedDeliveryDate: selectedRequest.value.plannedDeliveryDate
     })
+    refreshRequests()
     alert(t('inventory.dateSaved'))
+    closeRequestDetails()
   } catch (error) {
     console.error('Ошибка:', error)
   }
